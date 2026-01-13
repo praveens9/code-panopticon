@@ -66,9 +66,7 @@ public class HtmlReporter {
                     json.append(",");
                 firstClass = false;
 
-                // Use the full filename (basename) as the short name
-                int lastSlash = d.className().lastIndexOf('/');
-                String shortName = lastSlash >= 0 ? d.className().substring(lastSlash + 1) : d.className();
+                String shortName = d.className(); // Use full path as requested
                 json.append(String.format(
                         "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
                         shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
@@ -101,8 +99,7 @@ public class HtmlReporter {
                 nodes.append(",");
             firstNode = false;
 
-            int lastSlash = d.className().lastIndexOf('/');
-            String shortName = lastSlash >= 0 ? d.className().substring(lastSlash + 1) : d.className();
+            String shortName = d.className(); // Use full path as requested
             nodes.append(String.format(
                     "{\"id\":\"%s\",\"name\":\"%s\",\"riskScore\":%.2f,\"coupled\":%d,\"verdict\":\"%s\"}",
                     d.className(), shortName, d.riskScore(), d.coupledPeers(), d.verdict()));
@@ -475,8 +472,9 @@ public class HtmlReporter {
 
                     // Treemap rendering
                     function renderTreemap() {
+                        const container = document.getElementById('treemap-tab');
                         const width = document.getElementById('treemap').clientWidth;
-                        const height = 600;
+                        const height = container.clientHeight - 40; // Subtract padding/text height
 
                         d3.select('#treemap').selectAll('*').remove();
 
