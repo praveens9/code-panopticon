@@ -506,12 +506,30 @@ public class HtmlReporter {
                                 if (classData) showDetails(classData);
                             });
 
-                        cell.append('text')
-                            .attr('class', 'treemap-label')
-                            .attr('x', d => (d.x1 - d.x0) / 2)
-                            .attr('y', d => (d.y1 - d.y0) / 2)
-                            .text(d => d.data.name)
-                            .style('font-size', d => Math.min((d.x1 - d.x0) / 8, (d.y1 - d.y0) / 3, 12) + 'px');
+                        cell.append('foreignObject')
+                            .attr('x', d => d.x0)
+                            .attr('y', d => d.y0)
+                            .attr('width', d => d.x1 - d.x0)
+                            .attr('height', d => d.y1 - d.y0)
+                            .append('xhtml:div')
+                            .style('width', '100%')
+                            .style('height', '100%')
+                            .style('display', 'flex')
+                            .style('align-items', 'center')
+                            .style('justify-content', 'center')
+                            .style('overflow', 'hidden')
+                            .style('color', 'white')
+                            .style('font-weight', '500')
+                            .style('font-size', '11px') // Fixed readable size
+                            .style('pointer-events', 'none') // Let clicks pass to rect
+                            .append('div')
+                            .style('text-overflow', 'ellipsis')
+                            .style('white-space', 'nowrap')
+                            .style('overflow', 'hidden')
+                            .style('width', '100%')
+                            .style('text-align', 'center')
+                            .style('padding', '0 4px')
+                            .text(d => d.data.name);
                     }
 
                     // Network rendering
