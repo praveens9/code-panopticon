@@ -529,8 +529,8 @@ public class HtmlReporter {
 
                         cell.append('text')
                             .attr('class', 'treemap-label')
-                            .attr('x', d => (d.x1 + d.x0) / 2)
-                            .attr('y', d => (d.y1 + d.y0) / 2)
+                            .attr('x', d => (d.x1 - d.x0) / 2)
+                            .attr('y', d => (d.y1 - d.y0) / 2)
                             .attr('text-anchor', 'middle')
                             .attr('dominant-baseline', 'middle')
                             .style('fill', 'white')
