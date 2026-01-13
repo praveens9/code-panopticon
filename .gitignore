@@ -60,3 +60,5 @@ push_to_personal.sh
 # Generated Reports and Graphs
 panopticon-report.html
 app/graphs/
+# Generated reports
+reports/

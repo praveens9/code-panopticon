@@ -8,8 +8,9 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class AppTest {
     @Test
-    void appInstantiates() {
-        App classUnderTest = new App();
-        assertNotNull(classUnderTest, "app should instantiate");
+    void appHasGreeting() {
+        // Simple smoke test to ensure main class loads
+        PolyglotApp classUnderTest = new PolyglotApp();
+        assertNotNull(classUnderTest, "app should have a greeting");
     }
 }

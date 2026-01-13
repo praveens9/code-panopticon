@@ -25,7 +25,7 @@ public class GitMiner {
 
         // 1. Calculate Churn (all time)
         Map<String, Integer> churnMap = calculateChurn(transactions);
-        System.out.println("Found " + churnMap.size() + " active Java files.");
+        System.out.println("Found " + churnMap.size() + " active source files.");
 
         // 2. Calculate Recent Churn (last 90 days)
         Map<String, Integer> recentChurnMap = calculateRecentChurn(transactions);
@@ -68,7 +68,7 @@ public class GitMiner {
                     // Parse timestamp
                     String timestampStr = line.substring(3);
                     currentTimestamp = Long.parseLong(timestampStr);
-                } else if (line.endsWith(".java")) {
+                } else if (isSourceFile(line)) {
                     currentCommit.add(line);
                 }
             }
@@ -163,5 +163,24 @@ public class GitMiner {
             }
         }
         return couplingResult;
+    }
+
+
+    /**
+     * Check if a file is a source file based on extension.
+     * Supports: Java, Python, JavaScript, TypeScript, Go, Rust, Ruby, PHP, C/C++
+     */
+    private static boolean isSourceFile(String filename) {
+        String lower = filename.toLowerCase();
+        return lower.endsWith(".java") || lower.endsWith(".py") ||
+                lower.endsWith(".js") || lower.endsWith(".jsx") ||
+                lower.endsWith(".ts") || lower.endsWith(".tsx") ||
+                lower.endsWith(".mjs") || lower.endsWith(".cjs") ||
+                lower.endsWith(".go") || lower.endsWith(".rs") ||
+                lower.endsWith(".rb") || lower.endsWith(".php") ||
+                lower.endsWith(".c") || lower.endsWith(".cpp") ||
+                lower.endsWith(".h") || lower.endsWith(".hpp") ||
+                lower.endsWith(".kt") || lower.endsWith(".kts") ||
+                lower.endsWith(".swift") || lower.endsWith(".scala");
     }
 }

@@ -26,21 +26,28 @@ dependencies {
     implementation libs.sootup.core
     implementation libs.sootup.java.core
     implementation libs.sootup.java.bytecode
+    // YAML parsing for configuration
+    implementation 'org.yaml:snakeyaml:2.2'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(21)
+        languageVersion = JavaLanguageVersion.of(17)
     }
 }
 
 application {
     // Define the main class for the application.
-    mainClass = 'com.repo.analyzer.App'
+    mainClass = 'com.repo.analyzer.PolyglotApp'
 }
 
 tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
+}
+
+tasks.named('run') {
+    // Run from project root so reports go to root/reports
+    workingDir = rootProject.projectDir
 }

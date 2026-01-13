@@ -10,7 +10,7 @@ public class HtmlReporter {
 
     public void generate(List<AnalysisData> data, Path outputPath) {
         String json = convertToJson(data);
-        String treemapJson = convertToTreemapJson(data);
+        String treemapJson = convertToHierarchyJson(data);
         String networkJson = convertToNetworkJson(data);
 
         String html = TEMPLATE
@@ -26,7 +26,7 @@ public class HtmlReporter {
         }
     }
 
-    private String convertToJson(List<AnalysisData> data) {
+    String convertToJson(List<AnalysisData> data) {
         return data.stream()
                 .map(d -> String.format(
                         "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f }",
@@ -42,40 +42,88 @@ public class HtmlReporter {
                 .collect(Collectors.joining(", ", "[", "]"));
     }
 
-    private String convertToTreemapJson(List<AnalysisData> data) {
-        // Build hierarchical structure: root -> packages -> classes
-        Map<String, List<AnalysisData>> packageMap = new HashMap<>();
+    String convertToHierarchyJson(List<AnalysisData> data) {
+        HierarchyNode root = new HierarchyNode("root", "root");
 
         for (AnalysisData d : data) {
-            String pkg = extractPackage(d.className());
-            packageMap.computeIfAbsent(pkg, k -> new ArrayList<>()).add(d);
-        }
-
-        StringBuilder json = new StringBuilder("{\"name\":\"root\",\"children\":[");
-        boolean first = true;
-        for (Map.Entry<String, List<AnalysisData>> entry : packageMap.entrySet()) {
-            if (!first)
-                json.append(",");
-            first = false;
-
-            json.append(String.format("{\"name\":\"%s\",\"children\":[", entry.getKey()));
-
-            boolean firstClass = true;
-            for (AnalysisData d : entry.getValue()) {
-                if (!firstClass)
-                    json.append(",");
-                firstClass = false;
-
-                String shortName = d.className().substring(d.className().lastIndexOf('.') + 1);
-                json.append(String.format(
-                        "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
-                        shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
+            String[] parts = d.className().split("/");
+            // Group root-level files to avoid clutter
+            if (parts.length == 1) {
+                parts = new String[] { "Root Files", parts[0] };
             }
-            json.append("]}");
-        }
-        json.append("]}");
 
-        return json.toString();
+            HierarchyNode current = root;
+
+            // Build/Traverse the tree structure
+            for (int i = 0; i < parts.length; i++) {
+                String part = parts[i];
+                boolean isFile = (i == parts.length - 1);
+                String fullPath = d.className(); // Simplified, conceptually path up to here
+
+                HierarchyNode child = current.findChild(part);
+                if (child == null) {
+                    child = new HierarchyNode(part, isFile ? fullPath : part); // Only leaves need full path really
+                    current.children.add(child);
+                }
+                current = child;
+
+                // If it's a leaf (file), add the data
+                if (isFile) {
+                    current.value = d.loc(); // Size = LOC
+                    current.riskScore = d.riskScore();
+                    current.verdict = d.verdict();
+                    current.complexity = d.totalCC();
+                    current.churn = d.churn();
+                }
+            }
+        }
+        return root.toJson();
+    }
+
+    private static class HierarchyNode {
+        String name;
+        String fullName;
+        List<HierarchyNode> children = new ArrayList<>();
+        Double value; // LOC
+        Double riskScore;
+        Double complexity;
+        Integer churn;
+        String verdict;
+
+        HierarchyNode(String name, String fullName) {
+            this.name = name;
+            this.fullName = fullName;
+        }
+
+        HierarchyNode findChild(String name) {
+            for (HierarchyNode c : children) {
+                if (c.name.equals(name))
+                    return c;
+            }
+            return null;
+        }
+
+        String toJson() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"name\":\"").append(name).append("\"");
+
+            if (!children.isEmpty()) {
+                sb.append(",\"children\":[");
+                sb.append(children.stream().map(HierarchyNode::toJson).collect(Collectors.joining(",")));
+                sb.append("]");
+            } else {
+                // Leaf properties
+                sb.append(",\"value\":").append(value != null ? value : 0);
+                sb.append(",\"riskScore\":").append(riskScore != null ? riskScore : 0);
+                sb.append(",\"complexity\":").append(complexity != null ? complexity : 0);
+                sb.append(",\"churn\":").append(churn != null ? churn : 0);
+                sb.append(",\"verdict\":\"").append(verdict != null ? verdict : "OK").append("\"");
+                sb.append(",\"fullName\":\"").append(fullName != null ? fullName : "").append("\"");
+            }
+            sb.append("}");
+            return sb.toString();
+        }
     }
 
     private String convertToNetworkJson(List<AnalysisData> data) {
@@ -99,7 +147,7 @@ public class HtmlReporter {
                 nodes.append(",");
             firstNode = false;
 
-            String shortName = d.className().substring(d.className().lastIndexOf('.') + 1);
+            String shortName = d.className(); // Use full path as requested
             nodes.append(String.format(
                     "{\"id\":\"%s\",\"name\":\"%s\",\"riskScore\":%.2f,\"coupled\":%d,\"verdict\":\"%s\"}",
                     d.className(), shortName, d.riskScore(), d.coupledPeers(), d.verdict()));
@@ -137,20 +185,6 @@ public class HtmlReporter {
         return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
     }
 
-    private String extractPackage(String className) {
-        int lastDot = className.lastIndexOf('.');
-        if (lastDot > 0) {
-            String fullPkg = className.substring(0, lastDot);
-            // Get top 2-3 package levels for better grouping
-            String[] parts = fullPkg.split("\\.");
-            if (parts.length > 3) {
-                return String.join(".", Arrays.copyOfRange(parts, 0, Math.min(4, parts.length)));
-            }
-            return fullPkg;
-        }
-        return "default";
-    }
-
     private static final String TEMPLATE = """
             <!DOCTYPE html>
             <html>
@@ -178,12 +212,18 @@ public class HtmlReporter {
                     /* Chart Area */
                     .chart-container { position: relative; height: 60vh; width: 100%; }
 
-                    /* Treemap */
-                    #treemap { width: 100%; height: 60vh; }
-                    .treemap-cell { stroke: #fff; stroke-width: 2px; cursor: pointer; }
-                    .treemap-cell:hover { stroke: #000; stroke-width: 3px; }
-                    .treemap-label { font-size: 12px; fill: white; text-anchor: middle; pointer-events: none; }
-                    .treemap-package { font-size: 14px; font-weight: bold; fill: #333; }
+                    /* System Map (Circle Packing) */
+                    #treemap { width: 100%; height: 75vh; display: block; background: white; }
+                    .node { cursor: pointer; }
+                    .node:hover { stroke: #333; stroke-width: 2px; }
+                    /* .node--leaf removed to prevent color override */
+                    .label { font: 11px "Helvetica Neue", Helvetica, Arial, sans-serif; text-anchor: middle; text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff; pointer-events: none; fill: #2c3e50; font-weight: bold; }
+                    .label, .node--root { pointer-events: none; }
+                    #breadcrumbs { font-size: 1.1rem; padding: 10px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; display: flex; align-items: center; }
+                    .crumb { cursor: pointer; color: #3498db; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
+                    .crumb:hover { background: #eaf2f8; text-decoration: none; }
+                    .crumb:last-child { color: #2c3e50; cursor: default; font-weight: bold; background: none; }
+                    .crumb-separator { color: #999; margin: 0 5px; }
 
                     /* Network Graph */
                     #network-container { width: 100%; height: 60vh; overflow: auto; position: relative; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
@@ -213,7 +253,7 @@ public class HtmlReporter {
                         overflow-y: auto;
                     }
 
-                    #detailsPanel.active { display: flex; }
+                    #detailsPanel.active { display: flex !important; }
                     .panel-header { border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px; }
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
@@ -226,9 +266,12 @@ public class HtmlReporter {
                     .verdict-HIDDEN_DEPENDENCY { background-color: #e67e22; }
                     .verdict-HIGH_COUPLING { background-color: #f39c12; }
                     .verdict-COMPLEX { background-color: #f1c40f; color: #333; }
-                            .verdict-DATA_CLASS { background-color: #3498db; }
-                            .verdict-CONFIGURATION { background-color: #6c5ce7; }
-                            .verdict-ORCHESTRATOR { background-color: #1abc9c; }                    .verdict-OK { background-color: #27ae60; }
+                    .verdict-SPLIT_CANDIDATE { background-color: #9b59b6; }
+                    .verdict-BLOATED { background-color: #e74c3c; }
+                    .verdict-DATA_CLASS { background-color: #3498db; }
+                    .verdict-CONFIGURATION { background-color: #6c5ce7; }
+                    .verdict-ORCHESTRATOR { background-color: #1abc9c; }
+                    .verdict-OK { background-color: #27ae60; }
 
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                     .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
@@ -260,7 +303,7 @@ public class HtmlReporter {
                             <div class="tabs">
                                 <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
                                 <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                <button class="tab" onclick="switchTab('treemap')">Treemap</button>
+                                <button class="tab" onclick="switchTab('treemap')">System Map</button>
                                 <button class="tab" onclick="switchTab('network')">Network</button>
                             </div>
 
@@ -305,9 +348,16 @@ public class HtmlReporter {
                                 </table>
                             </div>
 
-                            <!-- Treemap Tab -->
+                            <!-- System Map Tab -->
+                            <!-- System Map Tab -->
                             <div id="treemap-tab" class="tab-content">
-                                <p><strong>Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score (Red = High, Green = Low)</p>
+                                <div id="breadcrumbs"><span class="crumb">root</span></div>
+                                <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                    <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                </div>
+                                <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                </div>
                                 <svg id="treemap"></svg>
                             </div>
 
@@ -347,15 +397,23 @@ public class HtmlReporter {
                     }
 
                     const getColor = (riskScore) => {
-                        if (riskScore > 100) return 'rgba(231, 76, 60, 0.7)';
-                        if (riskScore > 50) return 'rgba(241, 196, 15, 0.7)';
-                        return 'rgba(46, 204, 113, 0.7)';
+                        // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                        if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                        if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                        return 'rgba(46, 204, 113, 0.7)'; // Green
                     };
 
-                    const getRiskColor = (riskScore) => {
-                        if (riskScore > 100) return '#e74c3c';
-                        if (riskScore > 50) return '#f39c12';
-                        return '#27ae60';
+                    const getRiskColor = (d) => {
+                        // Use Verdict for explicit coloring if available
+                        const v = d.verdict;
+                        if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                        if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+
+                        // Fallback to numeric risk score
+                        const score = d.riskScore || 0;
+                        if (score > 20) return '#e74c3c';
+                        if (score > 5) return '#f39c12';
+                        return '#27ae60'; // Green
                     };
 
                     // Quadrant Chart (existing code)
@@ -403,7 +461,7 @@ public class HtmlReporter {
                                     callbacks: {
                                         label: function(context) {
                                             const d = context.raw;
-                                            return [d.label.split('.').pop(), `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
+                                            return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
                                         }
                                     }
                                 },
@@ -422,6 +480,53 @@ public class HtmlReporter {
                         },
                         plugins: [backgroundZones]
                     });
+
+                    // Side Panel Details
+                    function showDetails(d) {
+                        const panel = document.getElementById('detailsPanel');
+                        panel.classList.add('active');
+                        const content = document.getElementById('panelContent');
+                        content.innerHTML = `
+                            <div class="panel-header">
+                                <h2>${d.label}</h2>
+                                <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
+                            </div>
+                            <div class="stat-grid">
+                                <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                            </div>
+                            ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
+                            ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
+                            ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                            ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
+                            ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
+                            ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
+                            ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
+                            ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
+                            ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                            <div class="tips">
+                                <h4>Tips for Improvement:</h4>
+                                <ul>
+                                    <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
+                                    <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
+                                    <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
+                                    <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    function hideDetails() {
+                        document.getElementById('detailsPanel').classList.remove('active');
+                    }
 
                     // Table rendering
                     function renderTable() {
@@ -450,7 +555,7 @@ public class HtmlReporter {
 
                         tbody.innerHTML = filtered.map(d => `
                             <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                <td>${d.label.split('.').pop()}</td>
+                                <td>${d.label}</td>
                                 <td>${d.churn}</td>
                                 <td>${d.recentChurn}</td>
                                 <td>${d.riskScore.toFixed(1)}</td>
@@ -470,57 +575,189 @@ public class HtmlReporter {
                     document.getElementById('classFilter').addEventListener('input', renderTable);
                     document.getElementById('verdictFilter').addEventListener('change', renderTable);
 
-                    // Treemap rendering
+                    // System Map (Circle Packing) rendering
                     function renderTreemap() {
-                        const width = document.getElementById('treemap').clientWidth;
-                        const height = 600;
+                        // 1. Validate Container & Dimensions
+                        const container = document.getElementById('treemap-tab');
+                        const svgEl = document.getElementById('treemap');
+                        if (!container || !svgEl) {
+                            console.error("Missing container or svg element");
+                            return;
+                        }
 
+                        let width = svgEl.clientWidth;
+                        let height = container.clientHeight - 40;
+
+                        // Robust fallback for hidden/unmounted state
+                        if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
+                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 40;
+                        if (height < 400) height = 600; // Minimum sensible height
+
+                        // 2. Clear previous
                         d3.select('#treemap').selectAll('*').remove();
-
-                        const svg = d3.select('#treemap')
+                        d3.select('#treemap')
                             .attr('width', width)
-                            .attr('height', height);
+                            .attr('height', height)
+                            .style('cursor', 'pointer');
 
-                        const root = d3.hierarchy(treemapData)
-                            .sum(d => d.value || 0)
-                            .sort((a, b) => b.value - a.value);
+                        try {
+                            // 3. Data Check
+                            if (!treemapData || !treemapData.children) {
+                                throw new Error("No hierarchical data available");
+                            }
 
-                        d3.treemap()
-                            .size([width, height])
-                            .padding(2)
-                            (root);
+                            // 4. Setup Hierarchy
+                            const root = d3.hierarchy(treemapData)
+                                .sum(d => d.value || 0)
+                                .sort((a, b) => b.value - a.value);
 
-                        const cell = svg.selectAll('g')
-                            .data(root.leaves())
-                            .join('g')
-                            .attr('transform', d => `translate(${d.x0},${d.y0})`);
+                            let focus = root;
+                            let view;
 
-                        cell.append('rect')
-                            .attr('class', 'treemap-cell')
-                            .attr('width', d => d.x1 - d.x0)
-                            .attr('height', d => d.y1 - d.y0)
-                            .attr('fill', d => getRiskColor(d.data.riskScore || 0))
-                            .on('click', (event, d) => {
-                                const classData = rawData.find(r => r.label === d.data.fullName);
-                                if (classData) showDetails(classData);
-                            });
+                            // 5. Layout
+                            const pack = d3.pack()
+                                .size([width, height])
+                                .padding(2);
 
-                        cell.append('text')
-                            .attr('class', 'treemap-label')
-                            .attr('x', d => (d.x1 - d.x0) / 2)
-                            .attr('y', d => (d.y1 - d.y0) / 2)
-                            .text(d => d.data.name)
-                            .style('font-size', d => Math.min((d.x1 - d.x0) / 8, (d.y1 - d.y0) / 3, 12) + 'px');
+                            pack(root);
+
+                            // 6. Rendering
+                            const svg = d3.select('#treemap');
+
+                            // Background click handler
+                            svg.on('click', (event) => zoom(event, root));
+
+                            // Circles
+                            const node = svg.append('g')
+                                .selectAll('circle')
+                                .data(root.descendants())
+                                .join('circle')
+                                .attr('class', d => d.children ? 'node' : 'node node--leaf')
+                                .attr('fill', d => {
+                                    if (d.children) return '#ecf0f1';
+                                    try { return getRiskColor(d.data); } catch(e) { return '#bdc3c7'; }
+                                })
+                                .attr('stroke', d => d.children ? '#bdc3c7' : '#fff')
+                                .on('mouseover', function(event, d) { d3.select(this).attr('stroke', '#2c3e50'); })
+                                .on('mouseout', function(event, d) { d3.select(this).attr('stroke', d.children ? '#bdc3c7' : '#fff'); })
+                                .on('click', (event, d) => {
+                                    const isLeaf = !d.children || d.height === 0;
+                                    const isCmdClick = event.metaKey || event.ctrlKey;
+
+                                    if (isLeaf || isCmdClick) {
+                                        event.stopPropagation();
+
+                                        // 1. If it's a leaf, ALWAYS show details (Click or Cmd+Click)
+                                        if (isLeaf) {
+                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
+                                            if (classData) {
+                                                showDetails(classData);
+                                            } else {
+                                                console.warn("Details not found for " + d.data.name);
+                                            }
+                                        }
+                                        // 2. If it's a folder AND Cmd+Click, show logic (or ignore)
+                                        else if (isCmdClick) {
+                                            console.log("Folder selected: " + d.data.name + " (No details available)");
+                                        }
+
+                                        return;
+                                    }
+
+                                    if (focus !== d) {
+                                        zoom(event, d);
+                                        event.stopPropagation();
+                                    }
+                                });
+
+                            // Tooltips
+                            node.append('title')
+                                .text(d => `${d.data.name}\nLOC: ${d.value}\nRisk: ${(d.data.riskScore || 0).toFixed(1)}`);
+
+                            // Labels
+                            const label = svg.append('g')
+                                .style('font', '12px sans-serif')
+                                .attr('pointer-events', 'none')
+                                .attr('text-anchor', 'middle')
+                                .selectAll('text')
+                                .data(root.descendants())
+                                .join('text')
+                                .style('fill-opacity', d => d.parent === root ? 1 : 0)
+                                .style('display', d => d.parent === root ? 'inline' : 'none')
+                                .style('font-weight', d => d.children ? 'bold' : 'normal')
+                                .style('fill', '#2c3e50')
+                                .text(d => d.data.name);
+
+                            // Initial Zoom
+                            zoomTo([root.x, root.y, root.r * 2]);
+
+                            // --- Helper Functions ---
+
+                            function zoom(event, d) {
+                                focus = d;
+                                const transition = svg.transition().duration(750)
+                                    .tween('zoom', d => {
+                                        const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
+                                        return t => zoomTo(i(t));
+                                    });
+
+                                label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
+                                     .transition(transition)
+                                     .style('fill-opacity', d => d.parent === focus ? 1 : 0)
+                                     .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
+                                     .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
+
+                                updateBreadcrumbs(d);
+                            }
+
+                            function zoomTo(v) {
+                                const k = Math.min(width, height) / v[2];
+                                view = v;
+                                label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                node.attr('r', d => d.r * k);
+                            }
+
+                            function updateBreadcrumbs(n) {
+                                const bc = d3.select('#breadcrumbs');
+                                bc.selectAll('*').remove();
+                                const path = [];
+                                let curr = n;
+                                while(curr) { path.unshift(curr); curr = curr.parent; }
+
+                                path.forEach((node, i) => {
+                                    const isLast = i === path.length - 1;
+                                    const span = bc.append('span')
+                                        .text(node.data.name)
+                                        .attr('class', 'crumb')
+                                        .style('cursor', isLast ? 'default' : 'pointer');
+                                    if (!isLast) {
+                                        span.on('click', (e) => zoom(e, node));
+                                        bc.append('span').text(' > ').attr('class', 'crumb-separator');
+                                    }
+                                });
+                            }
+                            // Init Breadcrumbs
+                            updateBreadcrumbs(root);
+
+                        } catch (e) {
+                            console.error("Render Error:", e);
+                            d3.select('#treemap')
+                                .append('text')
+                                .attr('x', width / 2).attr('y', height / 2)
+                                .attr('text-anchor', 'middle')
+                                .attr('fill', 'red')
+                                .style('font-size', '20px')
+                                .text('Error: ' + e.message);
+                        }
                     }
-
-                    // Network rendering
 
 
                 // Network rendering
                 function renderNetwork() {
                     const container = document.getElementById('network-container');
-                    const width = 2000; // Large width for scrolling
-                    const height = 1500; // Large height for scrolling
+                    const width = container.clientWidth || 800;
+                    const height = container.clientHeight || 600;
 
                     d3.select('#network').selectAll('*').remove();
 
@@ -662,7 +899,7 @@ public class HtmlReporter {
                         const isHighROI = roi > 1000;
 
                                     const isBenign = d.verdict === 'OK' || d.verdict === 'ORCHESTRATOR' || d.verdict === 'DATA_CLASS' || d.verdict === 'CONFIGURATION';
-                        
+
                                     if (isHighROI && !isBenign) {
                                         steps.push({
                                             icon: '🔥',
@@ -670,23 +907,23 @@ public class HtmlReporter {
                                             desc: `Refactoring ROI is ${Math.round(roi)}. This file is complex AND changes often. Fixing this will dramatically reduce long-term maintenance costs.`
                                         });
                                     }
-                        
+
                                     // 1. Check LCOM4 (SRP Violated) - Suppress if Benign
                                     if (d.lcom4 > 1 && !d.isDataClass && d.verdict !== 'CONFIGURATION') {                                        let desc = `LCOM4 is ${d.lcom4.toFixed(1)}. This class likely handles ${Math.ceil(d.lcom4)} unrelated responsibilities. Group fields/methods by usage and extract.`;
-                        
+
                                         if (d.lcom4Blocks && d.lcom4Blocks.length > 1) {
                                             const componentsHtml = d.lcom4Blocks.map((block, index) => {
                                                 // Filter out noise (lambdas) for the display list
                                                 const cleanBlock = block.filter(m => !m.includes('lambda$'));
                                                 if (cleanBlock.length === 0) return ''; // Skip if only lambdas
-                        
+
                                                 return `<div style="margin-top:4px; padding:4px; background:white; border:1px solid #ddd; border-radius:3px;">
                                                     <strong>Group ${index + 1}:</strong> <span style="font-family:monospace; color:#555;">${cleanBlock.slice(0, 5).join(', ')}${cleanBlock.length > 5 ? '...' : ''}</span>
                                                  </div>`;
                                             }).filter(html => html !== '').join('');
                                             desc += `<div style="margin-top:8px;">${componentsHtml}</div>`;
                                         }
-                        
+
                                         steps.push({
                                             icon: '✂️',
                                             title: 'Split the Class',
@@ -753,7 +990,7 @@ public class HtmlReporter {
 
                         content.innerHTML = `
                             <div class="panel-header">
-                                <h2>${d.label.split('.').pop()}</h2>
+                                <h2>${d.label}</h2>
                                 <span class="verdict-badge ${badgeClass}">${d.verdict}</span>
                             </div>
 
