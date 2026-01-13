@@ -1,72 +1,116 @@
 # Code Panopticon
 
-A holistic Java code forensic tool that identifies architectural decay by fusing **Evolutionary History (Git)** with **Structural Semantics (Bytecode Analysis)**.
+A **polyglot code forensic tool** that identifies architectural decay by fusing **Evolutionary History (Git)** with **Structural Analysis**.
+
+Supports: **Java** (bytecode), **Python** (AST), **JavaScript/TypeScript** (regex), and any other language (generic fallback).
 
 ---
 
 ## 🚀 Purpose
 
-In large-scale Java projects, standard linters often fail to capture the "Context of Risk." This tool categorizes code based on its **Volatility** (how often it changes) and its **Internal Complexity** (how hard it is to maintain).
+In large-scale projects, standard linters often fail to capture the "Context of Risk." This tool categorizes code based on its **Volatility** (how often it changes) and its **Internal Complexity** (how hard it is to maintain).
 
-The goal is to identify **"Burning Platforms"**—highly active classes that are structurally unsound—so teams can prioritize refactoring where it matters most.
+The goal is to identify **"Burning Platforms"**—highly active files that are structurally unsound—so teams can prioritize refactoring where it matters most.
 
 ---
 
-## 📊 The Metrics (The Legend)
-
-The tool generates a report with the following forensic dimensions:
+## 📊 The Metrics
 
 | Metric | Category | Description |
 | :--- | :--- | :--- |
-| **Churn** | Evolutionary | Number of Git commits touching the file. High churn indicates a "Hotspot". |
-| **Peers** | Evolutionary | **Temporal Coupling.** Number of other files that change *with* this file. High peers = Shotgun Surgery. |
-| **LCOM4** | Structural | **Cohesion.** Number of disjoint logic clusters. 1 = Cohesive. >1 = Fragmented. |
-| **Total CC** | Structural | **Class Mass.** Total logic branches in the class. Measures the "Testing Tax". |
-| **Max CC** | Structural | **Toxicity.** The complexity of the *single worst method* in the class. Identifies "Brain Methods". |
-| **FanOut** | Structural | **Coupling.** Number of unique domain types referenced. Measures fragility. |
+| **Churn** | Evolutionary | Number of Git commits touching the file. |
+| **Peers** | Evolutionary | Temporal coupling. Files that change together. |
+| **Complexity (CC)** | Structural | Cyclomatic complexity. Measures branching. |
+| **Max CC** | Structural | Complexity of the worst function. |
+| **Cohesion** | Structural | How related methods are to each other. |
+| **Fan-Out** | Structural | Number of dependencies (imports). |
+| **Risk Score** | Composite | `(Churn × CC × LCOM4) / 100` |
 
 ---
 
 ## 📋 Verdict Definitions
 
-We use a **Forensic Rule Engine** to categorize risk based on the combination of these metrics.
-
 | Verdict | Meaning | Action |
 | :--- | :--- | :--- |
-| **OK** | Metrics are within healthy thresholds. | None. |
-| **BRAIN_METHOD** | **Max CC > 15** + High Code Mass. The class contains a massive, dense algorithm. | **Extract Method** or Strategy Pattern. |
-| **SHOTGUN_SURGERY** | **Peers > 10**. Changing this file requires editing >10 other files simultaneously. | Identify copy-pasted logic or shared config leakage. |
-| **HIDDEN_DEPENDENCY** | **Peers > 3** + Low Fan-Out. The file is coupled to things it doesn't import (e.g., config, tests). | Check for implicit dependencies. |
-| **FRAGILE_HUB** | **FanOut > 30** + High Churn. A central coordinator that changes frequently. | Apply Interface Segregation. |
-| **SPLIT_CANDIDATE** | **LCOM4 > 1**. The class contains multiple disconnected clusters of logic. | Split into two classes. |
-| **TOTAL_MESS** | **LCOM4 > 4**. The class is a "Bag of Functions". | **High Priority Refactor.** |
-| **COMPLEX (Low Risk)** | **Max CC > 15** (Low Mass). High complexity due to boilerplate (e.g., String Switch). | Low priority. |
-| **GOD_CLASS** | High Complexity + High Size + Low Cohesion. | **Immediate Refactor.** |
-
----
-
-## 🎨 Visual Dashboard & "Virtual Detective"
-
-The tool generates a **`panopticon-report.html`** file featuring a **Bubble Chart**:
-
-1.  **Risk Quadrants:** Visualizing **Churn** (X-Axis) vs. **Complexity** (Y-Axis).
-    -   **Bubble Size:** Class Size (Method Count)
-    -   **Color:** Cohesion (🔴 Red = Low Cohesion, 🟢 Green = High Cohesion)
-2.  **Virtual Detective:** Click any bubble to open a **Forensic Profile**. The tool acts as an automated consultant, explaining *why* a file is risky (e.g., "This is a Stable Coordinator" vs "This is a Fragile Hub") and recommending specific fixes.
-
-It also generates **`panopticon-report.csv`** for spreadsheet analysis.
+| **OK** | Metrics within healthy thresholds | None |
+| **BRAIN_METHOD** | Contains massive, complex methods | Extract Method |
+| **SHOTGUN_SURGERY** | Changes ripple to many files | Centralize logic |
+| **SPLIT_CANDIDATE** | Multiple unrelated clusters | Split the class |
+| **TOTAL_MESS** | Very low cohesion | High priority refactor |
+| **GOD_CLASS** | Too complex and too large | Full decomposition |
 
 ---
 
 ## 🏃 How to Run
 
-1.  Ensure the target repository is **compiled** (e.g., `./gradlew compileJava`).
-2.  Run the full scan by providing the path to the **Git Repository** and the **Compiled Classes**:
+### Prerequisites
+- Java 17+
+- Python 3 (for Python analysis)
+- Node.js (optional, for ESLint-based JS analysis)
+
+### Analyze a Repository
 
 ```bash
-./gradlew run --args="<path_to_git_repo> <path_to_compiled_classes>" --console=plain
+# 1. Clone and build
+git clone <repo-url>
+cd code-panopticon
+./gradlew compileJava
+
+# 2. Analyze with Java bytecode (for Java projects)
+./gradlew run --args="--repo /path/to/project --classes /path/to/compiled/classes" --console=plain
+
+# 3. Analyze without bytecode (Python, JS, etc.)
+./gradlew run --args="--repo /path/to/project" --console=plain
+
+# 4. Large repo mode (only analyze hotspots)
+./gradlew run --args="--repo /path/to/project --hotspots-only --min-churn 5"
+```
+
+### CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--repo <path>` | Path to Git repository (required) |
+| `--classes <path>` | Path to compiled Java classes (optional) |
+| `--output <dir>` | Output directory for reports (default: current) |
+| `--hotspots-only` | Only analyze files with Git activity |
+| `--min-churn <n>` | Minimum churn to include a file |
+
+---
+
+## 📁 Output
+
+- **panopticon-report.html** - Interactive dashboard with quadrant view, treemap, and network graph
+- **panopticon-report.csv** - Spreadsheet-friendly data export
+
+---
+
+## 🏗️ Architecture
+
+```
+PolyglotApp (CLI)
+    │
+    ├── GitMiner (evolutionary metrics)
+    │
+    ├── AnalyzerRegistry (plugin system)
+    │   ├── JavaBytecodeAnalyzer (SootUp)
+    │   ├── PythonAnalyzer (AST)
+    │   ├── JavaScriptAnalyzer (regex)
+    │   └── GenericTextAnalyzer (fallback)
+    │
+    ├── ForensicRuleEngine (configurable verdicts)
+    │
+    └── Reporters (HTML, CSV)
 ```
 
 ---
 
-#static-analysis #sootup #git-forensics #java #clean-code #architecture
+## 📚 Documentation
+
+- [Architecture Plan](docs/plan.md) - Detailed design decisions
+- [Analyzer Reference](docs/analyzer-reference.md) - Technical implementation details
+- [Progress Tracker](docs/progress.md) - Implementation status
+
+---
+
+#static-analysis #code-quality #git-forensics #polyglot #architecture
