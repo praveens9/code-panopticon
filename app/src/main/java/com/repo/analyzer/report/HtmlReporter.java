@@ -200,9 +200,12 @@ public class HtmlReporter {
                     .verdict-HIDDEN_DEPENDENCY { background-color: #e67e22; }
                     .verdict-HIGH_COUPLING { background-color: #f39c12; }
                     .verdict-COMPLEX { background-color: #f1c40f; color: #333; }
-                            .verdict-DATA_CLASS { background-color: #3498db; }
-                            .verdict-CONFIGURATION { background-color: #6c5ce7; }
-                            .verdict-ORCHESTRATOR { background-color: #1abc9c; }                    .verdict-OK { background-color: #27ae60; }
+                    .verdict-SPLIT_CANDIDATE { background-color: #9b59b6; }
+                    .verdict-BLOATED { background-color: #e74c3c; }
+                    .verdict-DATA_CLASS { background-color: #3498db; }
+                    .verdict-CONFIGURATION { background-color: #6c5ce7; }
+                    .verdict-ORCHESTRATOR { background-color: #1abc9c; }
+                    .verdict-OK { background-color: #27ae60; }
 
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                     .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
@@ -527,6 +530,10 @@ public class HtmlReporter {
                                 if (classData) showDetails(classData);
                             });
 
+                        // Add tooltip title showing full path
+                        cell.append('title')
+                            .text(d => d.data.fullName);
+
                         cell.append('text')
                             .attr('class', 'treemap-label')
                             .attr('x', d => (d.x1 - d.x0) / 2)
@@ -534,11 +541,19 @@ public class HtmlReporter {
                             .attr('text-anchor', 'middle')
                             .attr('dominant-baseline', 'middle')
                             .style('fill', 'white')
-                            .style('text-shadow', '0px 0px 2px rgba(0,0,0,0.5)') // Ensure contrast
-                            .style('font-size', d => Math.min((d.x1 - d.x0) / 6, 12) + 'px') // Dynamic sizing
+                            .style('text-shadow', '0px 0px 2px rgba(0,0,0,0.5)')
+                            .style('font-size', d => Math.min((d.x1 - d.x0) / 6, 12) + 'px')
                             .style('font-weight', '500')
                             .style('pointer-events', 'none')
-                            .text(d => d.data.fullName);
+                            .text(d => {
+                                const width = d.x1 - d.x0;
+                                const height = d.y1 - d.y0;
+                                // Hide label if box is too small
+                                if (width < 60 || height < 25) return '';
+                                // Show only filename (basename)
+                                const fullName = d.data.fullName || '';
+                                return fullName.split('/').pop();
+                            });
                     }
 
                     // Network rendering
