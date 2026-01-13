@@ -1,0 +1,62 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Reports and generated files
+
+*.log
+*.out
+*.tmp
+*.csv
+
+# Environment and credentials
+.env
+keys.sh
+*.key
+*.pem
+*.crt
+*.csr
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk files
+.DS_Store
+Thumbs.db
+
+# GitHub CLI cache
+gh_cli_cache/
+*.gh.json
+
+# Backup and temporary files
+*~
+*.bak
+*.old
+*.orig
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Notebooks or scratchpads
+*.ipynb_checkpoints/
+
+# Data cache
+.cache/
+dist/
+build/
+create_private_repo.sh
+push_to_personal.sh
+
+# Gradle
+.gradle/
+
+# Generated Reports and Graphs
+panopticon-report.html
+app/graphs/
