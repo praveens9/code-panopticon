@@ -69,7 +69,7 @@ public class ForensicRuleEngine {
             return metrics.cohesion() > 0 ? 1.0 / metrics.cohesion() : 1.0;
         }
 
-        @SuppressWarnings("unchecked")
+        // Unnecessary suppression removed - this is actually safe as-is
         public <T> T getExtra(String key, T defaultValue) {
             return metrics.getExtra(key, defaultValue);
         }
@@ -167,7 +167,7 @@ public class ForensicRuleEngine {
         defaultRules.add(new VerdictRule(
                 "BRAIN_METHOD",
                 6,
-                ctx -> ctx.maxCC() > 15 && !ctx.metrics().complexFunctions().isEmpty(),
+                ctx -> ctx.maxCC() > ctx.config().getBrainMethodMaxCC() && !ctx.metrics().complexFunctions().isEmpty(),
                 "Contains massive, dense algorithm methods"));
 
         // Priority 7: Complex (Low Risk)
@@ -188,7 +188,7 @@ public class ForensicRuleEngine {
         defaultRules.add(new VerdictRule(
                 "SPLIT_CANDIDATE",
                 9,
-                ctx -> ctx.lcom4() > 1,
+                ctx -> ctx.lcom4() > ctx.config().getSplitCandidateLcom4(),
                 "Contains disconnected clusters that could be separate classes"));
 
         // Priority 10: High Coupling
@@ -202,7 +202,7 @@ public class ForensicRuleEngine {
         defaultRules.add(new VerdictRule(
                 "BLOATED",
                 11,
-                ctx -> ctx.loc() > 500,
+                ctx -> ctx.loc() > ctx.config().getBloatedLoc(),
                 "File is too large"));
 
         return defaultRules;

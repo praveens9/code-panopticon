@@ -26,6 +26,8 @@ dependencies {
     implementation libs.sootup.core
     implementation libs.sootup.java.core
     implementation libs.sootup.java.bytecode
+    // YAML parsing for configuration
+    implementation 'org.yaml:snakeyaml:2.2'
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

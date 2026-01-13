@@ -284,7 +284,18 @@ public class HtmlReporter {
 
                             <!-- Treemap Tab -->
                             <div id="treemap-tab" class="tab-content">
-                                <p><strong>Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score (Red = High, Green = Low)</p>
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                                    <p style="margin: 0;"><strong>Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score (Red = High, Green = Low)</p>
+                                    <div style="display: flex; gap: 10px; align-items: center;">
+                                        <span id="treemapCount" style="font-size: 0.9rem; color: #7f8c8d;"></span>
+                                        <select id="treemapFilter" onchange="renderTreemap()" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
+                                            <option value="50">Top 50</option>
+                                            <option value="100" selected>Top 100</option>
+                                            <option value="200">Top 200</option>
+                                            <option value="0">All Files</option>
+                                        </select>
+                                    </div>
+                                </div>
                                 <svg id="treemap"></svg>
                             </div>
 
@@ -498,7 +509,7 @@ public class HtmlReporter {
                     function renderTreemap() {
                         const container = document.getElementById('treemap-tab');
                         const width = document.getElementById('treemap').clientWidth;
-                        const height = container.clientHeight - 40; // Subtract padding/text height
+                        const height = container.clientHeight - 60; // Subtract padding/text height
 
                         d3.select('#treemap').selectAll('*').remove();
 
@@ -506,7 +517,29 @@ public class HtmlReporter {
                             .attr('width', width)
                             .attr('height', height);
 
-                        const root = d3.hierarchy(treemapData)
+                        // Apply filter based on dropdown selection
+                        const filterValue = parseInt(document.getElementById('treemapFilter').value) || 0;
+                        let filteredChildren = [...(treemapData.children || [])];
+
+                        // Sort by risk score (descending) for filtering
+                        filteredChildren.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+
+                        const totalFiles = filteredChildren.length;
+                        if (filterValue > 0 && filteredChildren.length > filterValue) {
+                            filteredChildren = filteredChildren.slice(0, filterValue);
+                        }
+
+                        // Update count display
+                        const countEl = document.getElementById('treemapCount');
+                        if (filterValue > 0 && totalFiles > filterValue) {
+                            countEl.textContent = `Showing ${filterValue} of ${totalFiles} files`;
+                        } else {
+                            countEl.textContent = `${totalFiles} files`;
+                        }
+
+                        const filteredData = { name: 'root', children: filteredChildren };
+
+                        const root = d3.hierarchy(filteredData)
                             .sum(d => d.value || 0)
                             .sort((a, b) => b.value - a.value);
 

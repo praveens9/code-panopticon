@@ -85,6 +85,43 @@ cd code-panopticon
 
 ---
 
+## ⚙️ Configuration
+
+Create a `panopticon.yaml` in your project root to customize analysis:
+
+```yaml
+# Thresholds for verdict classification
+thresholds:
+  total_mess:
+    churn: 20
+    complexity: 50
+  brain_method:
+    max_cc: 15
+  split_candidate:
+    lcom4: 3
+  bloated:
+    loc: 500
+
+# Risk score weights
+weights:
+  churn: 1.0
+  complexity: 1.0
+  coupling: 0.1
+
+# Files to exclude from analysis
+exclusions:
+  - "**/test/**"
+  - "**/node_modules/**"
+
+# Treemap visualization
+treemap:
+  max_files: 100  # Limit displayed files
+```
+
+See [`panopticon.yaml`](panopticon.yaml) for all available options.
+
+---
+
 ## 📁 Output
 
 - **panopticon-report.html** - Interactive dashboard with quadrant view, treemap, and network graph

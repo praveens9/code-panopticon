@@ -180,8 +180,8 @@ public class PolyglotApp {
     }
 
     private void runAnalysis(Path repoPath, CliArgs args) throws Exception {
-        // Build configuration
-        AnalyzerConfig config = AnalyzerConfig.DEFAULT;
+        // Build configuration from YAML (or defaults)
+        AnalyzerConfig config = AnalyzerConfig.load(repoPath);
         if (args.classesPath() != null) {
             config = config.withCompiledClassesPath(args.classesPath());
         }
@@ -336,7 +336,7 @@ public class PolyglotApp {
         // Keep full relative path with extension for clarity
         // Makes backend/main.py vs frontend/main.js distinguishable
         String s = path;
-        
+
         // Remove common source prefixes only
         for (String prefix : List.of("src/main/java/", "src/main/", "src/", "lib/", "app/src/")) {
             if (s.startsWith(prefix)) {
@@ -344,7 +344,7 @@ public class PolyglotApp {
                 break;
             }
         }
-        
+
         // Keep the path with slashes and extension - don't convert to dots
         return s;
     }

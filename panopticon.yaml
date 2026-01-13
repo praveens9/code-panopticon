@@ -1,0 +1,54 @@
+# Code Panopticon Configuration
+# Copy this file to your project root to customize analysis
+# All values shown are defaults
+
+# Threshold settings for verdict classification
+thresholds:
+  # TOTAL_MESS: Files with high churn AND high complexity
+  total_mess:
+    churn: 20
+    complexity: 50
+
+  # BRAIN_METHOD: Single method with very high cyclomatic complexity
+  brain_method:
+    max_cc: 15
+
+  # SPLIT_CANDIDATE: Low cohesion (high LCOM4)
+  split_candidate:
+    lcom4: 3
+
+  # BLOATED: Very large files
+  bloated:
+    loc: 500
+
+  # GOD_CLASS: High complexity + low cohesion
+  god_class:
+    complexity: 100
+    lcom4: 2
+
+# Risk score calculation weights
+# Formula: churn * (1 + log10(1 + complexity)) * (1 + coupled * coupling_weight)
+weights:
+  churn: 1.0
+  complexity: 1.0
+  coupling: 0.1
+
+# Glob patterns to exclude from analysis
+exclusions:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+  - "**/*_test.py"
+  - "**/node_modules/**"
+  - "**/vendor/**"
+  - "**/__pycache__/**"
+
+# Treemap visualization settings
+treemap:
+  # Maximum files to display (reduces clutter on large projects)
+  max_files: 100
+  # Group files by top-level folder (enables drill-down)
+  group_by_folder: false
+  # Minimum box dimensions to show label (pixels)
+  min_label_width: 60
+  min_label_height: 25
