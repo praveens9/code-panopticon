@@ -10,7 +10,7 @@ public class HtmlReporter {
 
     public void generate(List<AnalysisData> data, Path outputPath) {
         String json = convertToJson(data);
-        String treemapJson = convertToTreemapJson(data);
+        String treemapJson = convertToHierarchyJson(data);
         String networkJson = convertToNetworkJson(data);
 
         String html = TEMPLATE
@@ -42,28 +42,88 @@ public class HtmlReporter {
                 .collect(Collectors.joining(", ", "[", "]"));
     }
 
-    private String convertToTreemapJson(List<AnalysisData> data) {
-        // Flat structure: Root -> Files
-        // No grouping by package/folder to ensure cleaner layout and better label
-        // visibility
-        StringBuilder json = new StringBuilder("{\"name\":\"root\",\"children\":[");
+    private String convertToHierarchyJson(List<AnalysisData> data) {
+        HierarchyNode root = new HierarchyNode("root", "root");
 
-        boolean firstClass = true;
         for (AnalysisData d : data) {
-            // Skip test files if needed, or included? Assuming 'data' is already
-            // filtered/relevant
-            if (!firstClass)
-                json.append(",");
-            firstClass = false;
+            String[] parts = d.className().split("/");
+            // Group root-level files to avoid clutter
+            if (parts.length == 1) {
+                parts = new String[] { "Root Files", parts[0] };
+            }
 
-            String shortName = d.className(); // Full path
-            json.append(String.format(
-                    "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
-                    shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
+            HierarchyNode current = root;
+
+            // Build/Traverse the tree structure
+            for (int i = 0; i < parts.length; i++) {
+                String part = parts[i];
+                boolean isFile = (i == parts.length - 1);
+                String fullPath = d.className(); // Simplified, conceptually path up to here
+
+                HierarchyNode child = current.findChild(part);
+                if (child == null) {
+                    child = new HierarchyNode(part, isFile ? fullPath : part); // Only leaves need full path really
+                    current.children.add(child);
+                }
+                current = child;
+
+                // If it's a leaf (file), add the data
+                if (isFile) {
+                    current.value = d.loc(); // Size = LOC
+                    current.riskScore = d.riskScore();
+                    current.verdict = d.verdict();
+                    current.complexity = d.totalCC();
+                    current.churn = d.churn();
+                }
+            }
+        }
+        return root.toJson();
+    }
+
+    private static class HierarchyNode {
+        String name;
+        String fullName;
+        List<HierarchyNode> children = new ArrayList<>();
+        Double value; // LOC
+        Double riskScore;
+        Double complexity;
+        Integer churn;
+        String verdict;
+
+        HierarchyNode(String name, String fullName) {
+            this.name = name;
+            this.fullName = fullName;
         }
 
-        json.append("]}");
-        return json.toString();
+        HierarchyNode findChild(String name) {
+            for (HierarchyNode c : children) {
+                if (c.name.equals(name))
+                    return c;
+            }
+            return null;
+        }
+
+        String toJson() {
+            StringBuilder sb = new StringBuilder();
+            sb.append("{");
+            sb.append("\"name\":\"").append(name).append("\"");
+
+            if (!children.isEmpty()) {
+                sb.append(",\"children\":[");
+                sb.append(children.stream().map(HierarchyNode::toJson).collect(Collectors.joining(",")));
+                sb.append("]");
+            } else {
+                // Leaf properties
+                sb.append(",\"value\":").append(value != null ? value : 0);
+                sb.append(",\"riskScore\":").append(riskScore != null ? riskScore : 0);
+                sb.append(",\"complexity\":").append(complexity != null ? complexity : 0);
+                sb.append(",\"churn\":").append(churn != null ? churn : 0);
+                sb.append(",\"verdict\":\"").append(verdict != null ? verdict : "OK").append("\"");
+                sb.append(",\"fullName\":\"").append(fullName != null ? fullName : "").append("\"");
+            }
+            sb.append("}");
+            return sb.toString();
+        }
     }
 
     private String convertToNetworkJson(List<AnalysisData> data) {
@@ -152,12 +212,18 @@ public class HtmlReporter {
                     /* Chart Area */
                     .chart-container { position: relative; height: 60vh; width: 100%; }
 
-                    /* Treemap */
-                    #treemap { width: 100%; height: 60vh; }
-                    .treemap-cell { stroke: #fff; stroke-width: 2px; cursor: pointer; }
-                    .treemap-cell:hover { stroke: #000; stroke-width: 3px; }
-                    .treemap-label { font-size: 12px; fill: white; text-anchor: middle; pointer-events: none; }
-                    .treemap-package { font-size: 14px; font-weight: bold; fill: #333; }
+                    /* System Map (Circle Packing) */
+                    #treemap { width: 100%; height: 75vh; display: block; background: white; }
+                    .node { cursor: pointer; }
+                    .node:hover { stroke: #333; stroke-width: 2px; }
+                    /* .node--leaf removed to prevent color override */
+                    .label { font: 11px "Helvetica Neue", Helvetica, Arial, sans-serif; text-anchor: middle; text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff; pointer-events: none; fill: #2c3e50; font-weight: bold; }
+                    .label, .node--root { pointer-events: none; }
+                    #breadcrumbs { font-size: 1.1rem; padding: 10px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; display: flex; align-items: center; }
+                    .crumb { cursor: pointer; color: #3498db; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
+                    .crumb:hover { background: #eaf2f8; text-decoration: none; }
+                    .crumb:last-child { color: #2c3e50; cursor: default; font-weight: bold; background: none; }
+                    .crumb-separator { color: #999; margin: 0 5px; }
 
                     /* Network Graph */
                     #network-container { width: 100%; height: 60vh; overflow: auto; position: relative; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
@@ -187,7 +253,7 @@ public class HtmlReporter {
                         overflow-y: auto;
                     }
 
-                    #detailsPanel.active { display: flex; }
+                    #detailsPanel.active { display: flex !important; }
                     .panel-header { border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px; }
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
@@ -237,7 +303,7 @@ public class HtmlReporter {
                             <div class="tabs">
                                 <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
                                 <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                <button class="tab" onclick="switchTab('treemap')">Treemap</button>
+                                <button class="tab" onclick="switchTab('treemap')">System Map</button>
                                 <button class="tab" onclick="switchTab('network')">Network</button>
                             </div>
 
@@ -282,19 +348,15 @@ public class HtmlReporter {
                                 </table>
                             </div>
 
-                            <!-- Treemap Tab -->
+                            <!-- System Map Tab -->
+                            <!-- System Map Tab -->
                             <div id="treemap-tab" class="tab-content">
-                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                                    <p style="margin: 0;"><strong>Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score (Red = High, Green = Low)</p>
-                                    <div style="display: flex; gap: 10px; align-items: center;">
-                                        <span id="treemapCount" style="font-size: 0.9rem; color: #7f8c8d;"></span>
-                                        <select id="treemapFilter" onchange="renderTreemap()" style="padding: 5px; border-radius: 4px; border: 1px solid #ddd;">
-                                            <option value="50">Top 50</option>
-                                            <option value="100" selected>Top 100</option>
-                                            <option value="200">Top 200</option>
-                                            <option value="0">All Files</option>
-                                        </select>
-                                    </div>
+                                <div id="breadcrumbs"><span class="crumb">root</span></div>
+                                <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                    <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                </div>
+                                <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Cmd/Ctrl + Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
                                 </div>
                                 <svg id="treemap"></svg>
                             </div>
@@ -335,15 +397,23 @@ public class HtmlReporter {
                     }
 
                     const getColor = (riskScore) => {
-                        if (riskScore > 100) return 'rgba(231, 76, 60, 0.7)';
-                        if (riskScore > 50) return 'rgba(241, 196, 15, 0.7)';
-                        return 'rgba(46, 204, 113, 0.7)';
+                        // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                        if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                        if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                        return 'rgba(46, 204, 113, 0.7)'; // Green
                     };
 
-                    const getRiskColor = (riskScore) => {
-                        if (riskScore > 100) return '#e74c3c';
-                        if (riskScore > 50) return '#f39c12';
-                        return '#27ae60';
+                    const getRiskColor = (d) => {
+                        // Use Verdict for explicit coloring if available
+                        const v = d.verdict;
+                        if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                        if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+
+                        // Fallback to numeric risk score
+                        const score = d.riskScore || 0;
+                        if (score > 20) return '#e74c3c';
+                        if (score > 5) return '#f39c12';
+                        return '#27ae60'; // Green
                     };
 
                     // Quadrant Chart (existing code)
@@ -505,91 +575,182 @@ public class HtmlReporter {
                     document.getElementById('classFilter').addEventListener('input', renderTable);
                     document.getElementById('verdictFilter').addEventListener('change', renderTable);
 
-                    // Treemap rendering
+                    // System Map (Circle Packing) rendering
                     function renderTreemap() {
+                        // 1. Validate Container & Dimensions
                         const container = document.getElementById('treemap-tab');
-                        const width = document.getElementById('treemap').clientWidth;
-                        const height = container.clientHeight - 60; // Subtract padding/text height
+                        const svgEl = document.getElementById('treemap');
+                        if (!container || !svgEl) {
+                            console.error("Missing container or svg element");
+                            return;
+                        }
 
+                        let width = svgEl.clientWidth;
+                        let height = container.clientHeight - 40;
+
+                        // Robust fallback for hidden/unmounted state
+                        if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
+                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 40;
+                        if (height < 400) height = 600; // Minimum sensible height
+
+                        // 2. Clear previous
                         d3.select('#treemap').selectAll('*').remove();
-
-                        const svg = d3.select('#treemap')
+                        d3.select('#treemap')
                             .attr('width', width)
-                            .attr('height', height);
+                            .attr('height', height)
+                            .style('cursor', 'pointer');
 
-                        // Apply filter based on dropdown selection
-                        const filterValue = parseInt(document.getElementById('treemapFilter').value) || 0;
-                        let filteredChildren = [...(treemapData.children || [])];
+                        try {
+                            // 3. Data Check
+                            if (!treemapData || !treemapData.children) {
+                                throw new Error("No hierarchical data available");
+                            }
 
-                        // Sort by risk score (descending) for filtering
-                        filteredChildren.sort((a, b) => (b.riskScore || 0) - (a.riskScore || 0));
+                            // 4. Setup Hierarchy
+                            const root = d3.hierarchy(treemapData)
+                                .sum(d => d.value || 0)
+                                .sort((a, b) => b.value - a.value);
 
-                        const totalFiles = filteredChildren.length;
-                        if (filterValue > 0 && filteredChildren.length > filterValue) {
-                            filteredChildren = filteredChildren.slice(0, filterValue);
+                            let focus = root;
+                            let view;
+
+                            // 5. Layout
+                            const pack = d3.pack()
+                                .size([width, height])
+                                .padding(2);
+
+                            pack(root);
+
+                            // 6. Rendering
+                            const svg = d3.select('#treemap');
+
+                            // Background click handler
+                            svg.on('click', (event) => zoom(event, root));
+
+                            // Circles
+                            const node = svg.append('g')
+                                .selectAll('circle')
+                                .data(root.descendants())
+                                .join('circle')
+                                .attr('class', d => d.children ? 'node' : 'node node--leaf')
+                                .attr('fill', d => {
+                                    if (d.children) return '#ecf0f1';
+                                    try { return getRiskColor(d.data); } catch(e) { return '#bdc3c7'; }
+                                })
+                                .attr('stroke', d => d.children ? '#bdc3c7' : '#fff')
+                                .on('mouseover', function(event, d) { d3.select(this).attr('stroke', '#2c3e50'); })
+                                .on('mouseout', function(event, d) { d3.select(this).attr('stroke', d.children ? '#bdc3c7' : '#fff'); })
+                                .on('click', (event, d) => {
+                                    const isLeaf = !d.children || d.height === 0;
+                                    const isCmdClick = event.metaKey || event.ctrlKey;
+
+                                    if (isLeaf || isCmdClick) {
+                                        event.stopPropagation();
+
+                                        // 1. If it's a leaf, ALWAYS show details (Click or Cmd+Click)
+                                        if (isLeaf) {
+                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
+                                            if (classData) {
+                                                showDetails(classData);
+                                            } else {
+                                                console.warn("Details not found for " + d.data.name);
+                                            }
+                                        }
+                                        // 2. If it's a folder AND Cmd+Click, show logic (or ignore)
+                                        else if (isCmdClick) {
+                                            console.log("Folder selected: " + d.data.name + " (No details available)");
+                                        }
+
+                                        return;
+                                    }
+
+                                    if (focus !== d) {
+                                        zoom(event, d);
+                                        event.stopPropagation();
+                                    }
+                                });
+
+                            // Tooltips
+                            node.append('title')
+                                .text(d => `${d.data.name}\nLOC: ${d.value}\nRisk: ${(d.data.riskScore || 0).toFixed(1)}`);
+
+                            // Labels
+                            const label = svg.append('g')
+                                .style('font', '12px sans-serif')
+                                .attr('pointer-events', 'none')
+                                .attr('text-anchor', 'middle')
+                                .selectAll('text')
+                                .data(root.descendants())
+                                .join('text')
+                                .style('fill-opacity', d => d.parent === root ? 1 : 0)
+                                .style('display', d => d.parent === root ? 'inline' : 'none')
+                                .style('font-weight', d => d.children ? 'bold' : 'normal')
+                                .style('fill', '#2c3e50')
+                                .text(d => d.data.name);
+
+                            // Initial Zoom
+                            zoomTo([root.x, root.y, root.r * 2]);
+
+                            // --- Helper Functions ---
+
+                            function zoom(event, d) {
+                                focus = d;
+                                const transition = svg.transition().duration(750)
+                                    .tween('zoom', d => {
+                                        const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
+                                        return t => zoomTo(i(t));
+                                    });
+
+                                label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
+                                     .transition(transition)
+                                     .style('fill-opacity', d => d.parent === focus ? 1 : 0)
+                                     .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
+                                     .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
+
+                                updateBreadcrumbs(d);
+                            }
+
+                            function zoomTo(v) {
+                                const k = Math.min(width, height) / v[2];
+                                view = v;
+                                label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                node.attr('r', d => d.r * k);
+                            }
+
+                            function updateBreadcrumbs(n) {
+                                const bc = d3.select('#breadcrumbs');
+                                bc.selectAll('*').remove();
+                                const path = [];
+                                let curr = n;
+                                while(curr) { path.unshift(curr); curr = curr.parent; }
+
+                                path.forEach((node, i) => {
+                                    const isLast = i === path.length - 1;
+                                    const span = bc.append('span')
+                                        .text(node.data.name)
+                                        .attr('class', 'crumb')
+                                        .style('cursor', isLast ? 'default' : 'pointer');
+                                    if (!isLast) {
+                                        span.on('click', (e) => zoom(e, node));
+                                        bc.append('span').text(' > ').attr('class', 'crumb-separator');
+                                    }
+                                });
+                            }
+                            // Init Breadcrumbs
+                            updateBreadcrumbs(root);
+
+                        } catch (e) {
+                            console.error("Render Error:", e);
+                            d3.select('#treemap')
+                                .append('text')
+                                .attr('x', width / 2).attr('y', height / 2)
+                                .attr('text-anchor', 'middle')
+                                .attr('fill', 'red')
+                                .style('font-size', '20px')
+                                .text('Error: ' + e.message);
                         }
-
-                        // Update count display
-                        const countEl = document.getElementById('treemapCount');
-                        if (filterValue > 0 && totalFiles > filterValue) {
-                            countEl.textContent = `Showing ${filterValue} of ${totalFiles} files`;
-                        } else {
-                            countEl.textContent = `${totalFiles} files`;
-                        }
-
-                        const filteredData = { name: 'root', children: filteredChildren };
-
-                        const root = d3.hierarchy(filteredData)
-                            .sum(d => d.value || 0)
-                            .sort((a, b) => b.value - a.value);
-
-                        d3.treemap()
-                            .size([width, height])
-                            .padding(2)
-                            (root);
-
-                        const cell = svg.selectAll('g')
-                            .data(root.leaves())
-                            .join('g')
-                            .attr('transform', d => `translate(${d.x0},${d.y0})`);
-
-                        cell.append('rect')
-                            .attr('class', 'treemap-cell')
-                            .attr('width', d => d.x1 - d.x0)
-                            .attr('height', d => d.y1 - d.y0)
-                            .attr('fill', d => getRiskColor(d.data.riskScore || 0))
-                            .on('click', (event, d) => {
-                                const classData = rawData.find(r => r.label === d.data.fullName);
-                                if (classData) showDetails(classData);
-                            });
-
-                        // Add tooltip title showing full path
-                        cell.append('title')
-                            .text(d => d.data.fullName);
-
-                        cell.append('text')
-                            .attr('class', 'treemap-label')
-                            .attr('x', d => (d.x1 - d.x0) / 2)
-                            .attr('y', d => (d.y1 - d.y0) / 2)
-                            .attr('text-anchor', 'middle')
-                            .attr('dominant-baseline', 'middle')
-                            .style('fill', 'white')
-                            .style('text-shadow', '0px 0px 2px rgba(0,0,0,0.5)')
-                            .style('font-size', d => Math.min((d.x1 - d.x0) / 6, 12) + 'px')
-                            .style('font-weight', '500')
-                            .style('pointer-events', 'none')
-                            .text(d => {
-                                const width = d.x1 - d.x0;
-                                const height = d.y1 - d.y0;
-                                // Hide label if box is too small
-                                if (width < 60 || height < 25) return '';
-                                // Show only filename (basename)
-                                const fullName = d.data.fullName || '';
-                                return fullName.split('/').pop();
-                            });
                     }
-
-                    // Network rendering
 
 
                 // Network rendering

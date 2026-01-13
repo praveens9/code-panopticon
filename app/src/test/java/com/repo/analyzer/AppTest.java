@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class AppTest {
     @Test
     void appInstantiates() {
-        App classUnderTest = new App();
+        PolyglotApp classUnderTest = new PolyglotApp();
         assertNotNull(classUnderTest, "app should instantiate");
     }
 }

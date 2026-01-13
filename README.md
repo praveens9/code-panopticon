@@ -113,8 +113,10 @@ exclusions:
   - "**/test/**"
   - "**/node_modules/**"
 
-# Treemap visualization
-treemap:
+#- **System Map**: Interactive circle packing visualization of codebase structure and risk. Zoom in to exploring folders and files.played files
+
+# System Map visualization
+system_map:
   max_files: 100  # Limit displayed files
 ```
 
