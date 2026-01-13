@@ -71,7 +71,7 @@ public class PolyglotApp {
     private static CliArgs parseArgs(String[] args) {
         String repoInput = null;
         Path classesPath = null;
-        Path outputDir = Path.of(".");
+        Path outputDir = Path.of("reports");
         boolean hotspotsOnly = false;
         int minChurn = 1;
         boolean keepClone = false;
@@ -300,6 +300,9 @@ public class PolyglotApp {
 
         // Phase 3: Generate Reports
         System.out.println("\n>>> PHASE 3: GENERATING REPORTS <<<");
+
+        // Create output directory if it does not exist
+        Files.createDirectories(args.outputDir());
 
         Path htmlPath = args.outputDir().resolve("panopticon-report.html");
         Path csvPath = args.outputDir().resolve("panopticon-report.csv");

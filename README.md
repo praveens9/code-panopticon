@@ -78,7 +78,7 @@ cd code-panopticon
 |--------|-------------|
 | `--repo <path\|url>` | Path or URL to Git repository (required) |
 | `--classes <path>` | Path to compiled Java classes (optional) |
-| `--output <dir>` | Output directory for reports (default: current) |
+| `--output <dir>` | Output directory for reports (default: `reports/`) |
 | `--hotspots-only` | Only analyze files with Git activity |
 | `--min-churn <n>` | Minimum churn to include a file |
 | `--keep-clone` | Keep cloned repo (for remote URLs) |
