@@ -9,11 +9,13 @@ import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 /**
  * Polyglot Code Panopticon - Analyzes code in any language.
@@ -57,25 +59,28 @@ public class PolyglotApp {
     }
 
     private record CliArgs(
-            Path repoPath,
+            String repoInput, // Original input (path or URL)
+            Path repoPath, // Resolved local path
             Path classesPath,
             Path outputDir,
             boolean hotspotsOnly,
-            int minChurn) {
+            int minChurn,
+            boolean keepClone) {
     }
 
     private static CliArgs parseArgs(String[] args) {
-        Path repoPath = null;
+        String repoInput = null;
         Path classesPath = null;
         Path outputDir = Path.of(".");
         boolean hotspotsOnly = false;
         int minChurn = 1;
+        boolean keepClone = false;
 
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--repo" -> {
                     if (i + 1 < args.length)
-                        repoPath = Path.of(args[++i]);
+                        repoInput = args[++i];
                 }
                 case "--classes" -> {
                     if (i + 1 < args.length)
@@ -90,17 +95,91 @@ public class PolyglotApp {
                     if (i + 1 < args.length)
                         minChurn = Integer.parseInt(args[++i]);
                 }
+                case "--keep-clone" -> keepClone = true;
             }
         }
 
-        if (repoPath == null) {
+        if (repoInput == null) {
             return null;
         }
 
-        return new CliArgs(repoPath, classesPath, outputDir, hotspotsOnly, minChurn);
+        // Resolve repo path - will be set after potential clone
+        Path repoPath = isRemoteUrl(repoInput) ? null : Path.of(repoInput);
+
+        return new CliArgs(repoInput, repoPath, classesPath, outputDir, hotspotsOnly, minChurn, keepClone);
+    }
+
+    private static boolean isRemoteUrl(String input) {
+        return input.startsWith("https://") || input.startsWith("git@") || input.startsWith("http://");
+    }
+
+    private Path cloneRemoteRepo(String url) throws Exception {
+        System.out.println("Cloning remote repository: " + url);
+
+        // Create temp directory
+        Path tempDir = Files.createTempDirectory("panopticon-");
+        System.out.println("Cloning to: " + tempDir);
+
+        ProcessBuilder pb = new ProcessBuilder("git", "clone", "--depth", "100", url, tempDir.toString());
+        pb.redirectErrorStream(true);
+        Process process = pb.start();
+
+        // Print clone progress
+        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println("  " + line);
+            }
+        }
+
+        boolean finished = process.waitFor(300, TimeUnit.SECONDS); // 5 min timeout
+        if (!finished || process.exitValue() != 0) {
+            throw new RuntimeException("Failed to clone repository: " + url);
+        }
+
+        System.out.println("Clone complete.");
+        return tempDir;
     }
 
     private void run(CliArgs args) throws Exception {
+        Path repoPath = args.repoPath();
+        Path tempCloneDir = null;
+
+        // Handle remote URLs
+        if (isRemoteUrl(args.repoInput())) {
+            tempCloneDir = cloneRemoteRepo(args.repoInput());
+            repoPath = tempCloneDir;
+        }
+
+        try {
+            runAnalysis(repoPath, args);
+        } finally {
+            // Cleanup temp directory if not keeping
+            if (tempCloneDir != null && !args.keepClone()) {
+                System.out.println("\nCleaning up temporary clone...");
+                deleteDirectory(tempCloneDir);
+            } else if (tempCloneDir != null) {
+                System.out.println("\nCloned repo kept at: " + tempCloneDir);
+            }
+        }
+    }
+
+    private void deleteDirectory(Path dir) {
+        try {
+            Files.walk(dir)
+                    .sorted(Comparator.reverseOrder())
+                    .forEach(path -> {
+                        try {
+                            Files.delete(path);
+                        } catch (Exception e) {
+                            /* ignore */ }
+                    });
+        } catch (Exception e) {
+            System.err.println("Warning: Could not fully clean up temp directory: " + dir);
+        }
+    }
+
+    private void runAnalysis(Path repoPath, CliArgs args) throws Exception {
         // Build configuration
         AnalyzerConfig config = AnalyzerConfig.DEFAULT;
         if (args.classesPath() != null) {
@@ -115,7 +194,7 @@ public class PolyglotApp {
         // Phase 1: Git Analysis
         System.out.println("\n>>> PHASE 1: MINING EVOLUTION (GIT) <<<");
         GitMiner miner = new GitMiner();
-        GitAnalysisResult gitResult = miner.scanHistory(args.repoPath());
+        GitAnalysisResult gitResult = miner.scanHistory(repoPath);
         Map<String, Integer> churnData = gitResult.churnMap();
         Map<String, Integer> recentChurnData = gitResult.recentChurnMap();
         Map<String, Set<String>> couplingData = gitResult.temporalCouplingMap();
@@ -154,7 +233,7 @@ public class PolyglotApp {
                 continue;
             }
 
-            Path filePath = args.repoPath().resolve(relativePath);
+            Path filePath = repoPath.resolve(relativePath);
             if (!Files.exists(filePath)) {
                 continue;
             }

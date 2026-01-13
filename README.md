@@ -56,13 +56,19 @@ git clone <repo-url>
 cd code-panopticon
 ./gradlew compileJava
 
-# 2. Analyze with Java bytecode (for Java projects)
+# 2. Analyze a local repo with Java bytecode
 ./gradlew run --args="--repo /path/to/project --classes /path/to/compiled/classes" --console=plain
 
-# 3. Analyze without bytecode (Python, JS, etc.)
+# 3. Analyze a local repo (Python, JS, etc.)
 ./gradlew run --args="--repo /path/to/project" --console=plain
 
-# 4. Large repo mode (only analyze hotspots)
+# 4. Analyze a remote GitHub repo (auto-clones)
+./gradlew run --args="--repo https://github.com/user/repo" --console=plain
+
+# 5. Keep the cloned repo after analysis
+./gradlew run --args="--repo https://github.com/user/repo --keep-clone" --console=plain
+
+# 6. Large repo mode (only analyze hotspots)
 ./gradlew run --args="--repo /path/to/project --hotspots-only --min-churn 5"
 ```
 
@@ -70,11 +76,12 @@ cd code-panopticon
 
 | Option | Description |
 |--------|-------------|
-| `--repo <path>` | Path to Git repository (required) |
+| `--repo <path\|url>` | Path or URL to Git repository (required) |
 | `--classes <path>` | Path to compiled Java classes (optional) |
 | `--output <dir>` | Output directory for reports (default: current) |
 | `--hotspots-only` | Only analyze files with Git activity |
 | `--min-churn <n>` | Minimum churn to include a file |
+| `--keep-clone` | Keep cloned repo (for remote URLs) |
 
 ---
 
