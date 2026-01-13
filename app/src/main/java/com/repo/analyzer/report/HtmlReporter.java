@@ -522,8 +522,8 @@ public class HtmlReporter {
                 // Network rendering
                 function renderNetwork() {
                     const container = document.getElementById('network-container');
-                    const width = 2000; // Large width for scrolling
-                    const height = 1500; // Large height for scrolling
+                    const width = container.clientWidth || 800;
+                    const height = container.clientHeight || 600;
 
                     d3.select('#network').selectAll('*').remove();
 
