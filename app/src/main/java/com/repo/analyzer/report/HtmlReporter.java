@@ -534,23 +534,11 @@ public class HtmlReporter {
                             .attr('text-anchor', 'middle')
                             .attr('dominant-baseline', 'middle')
                             .style('fill', 'white')
-                            .style('font-size', '11px')
+                            .style('text-shadow', '0px 0px 2px rgba(0,0,0,0.5)') // Ensure contrast
+                            .style('font-size', d => Math.min((d.x1 - d.x0) / 6, 12) + 'px') // Dynamic sizing
                             .style('font-weight', '500')
                             .style('pointer-events', 'none')
-                            .text(d => {
-                                try {
-                                    const width = d.x1 - d.x0;
-                                    const name = d.data.name;
-                                    if (!name) return "";
-                                    // Conservative truncation: 8px per char
-                                    if (name.length * 8 > width) {
-                                        const chars = Math.floor(width / 8);
-                                        if (chars < 3) return "..";
-                                        return name.substring(0, chars - 1) + "..";
-                                    }
-                                    return name;
-                                } catch(e) { return d.data.name || ""; }
-                            });
+                            .text(d => d.data.fullName);
                     }
 
                     // Network rendering
