@@ -333,22 +333,20 @@ public class PolyglotApp {
     }
 
     private String extractClassName(String path) {
-        // Remove common source prefixes
+        // Keep full relative path with extension for clarity
+        // Makes backend/main.py vs frontend/main.js distinguishable
         String s = path;
-        for (String prefix : List.of("src/main/java/", "src/", "lib/", "app/")) {
+        
+        // Remove common source prefixes only
+        for (String prefix : List.of("src/main/java/", "src/main/", "src/", "lib/", "app/src/")) {
             if (s.startsWith(prefix)) {
                 s = s.substring(prefix.length());
                 break;
             }
         }
-
-        // Remove extension and convert to class-like name
-        int dotIdx = s.lastIndexOf('.');
-        if (dotIdx > 0) {
-            s = s.substring(0, dotIdx);
-        }
-
-        return s.replace("/", ".").replace("\\", ".");
+        
+        // Keep the path with slashes and extension - don't convert to dots
+        return s;
     }
 
     private String truncate(String s, int len) {
