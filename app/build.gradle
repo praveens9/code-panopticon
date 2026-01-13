@@ -44,3 +44,8 @@ tasks.named('test') {
     // Use JUnit Platform for unit tests.
     useJUnitPlatform()
 }
+
+tasks.named('run') {
+    // Run from project root so reports go to root/reports
+    workingDir = rootProject.projectDir
+}
