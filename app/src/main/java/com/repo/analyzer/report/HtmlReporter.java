@@ -517,16 +517,18 @@ public class HtmlReporter {
                             .style('font-weight', '500')
                             .style('pointer-events', 'none')
                             .text(d => {
-                                const width = d.x1 - d.x0;
-                                const height = d.y1 - d.y0;
-                                if (width < 30 || height < 20) return ""; // Hide if too small
-                                const name = d.data.name;
-                                const charWidth = 7; // Approx width for 11px font
-                                const maxChars = Math.floor((width - 8) / charWidth); // 8px padding
-                                if (name.length > maxChars) {
-                                    return name.substring(0, Math.max(0, maxChars - 2)) + "..";
-                                }
-                                return name;
+                                try {
+                                    const width = d.x1 - d.x0;
+                                    const name = d.data.name;
+                                    if (!name) return "";
+                                    // Conservative truncation: 8px per char
+                                    if (name.length * 8 > width) {
+                                        const chars = Math.floor(width / 8);
+                                        if (chars < 3) return "..";
+                                        return name.substring(0, chars - 1) + "..";
+                                    }
+                                    return name;
+                                } catch(e) { return d.data.name || ""; }
                             });
                     }
 
