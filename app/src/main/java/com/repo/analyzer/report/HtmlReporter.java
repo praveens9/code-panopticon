@@ -66,7 +66,9 @@ public class HtmlReporter {
                     json.append(",");
                 firstClass = false;
 
-                String shortName = d.className().substring(d.className().lastIndexOf('.') + 1);
+                // Use the full filename (basename) as the short name
+                int lastSlash = d.className().lastIndexOf('/');
+                String shortName = lastSlash >= 0 ? d.className().substring(lastSlash + 1) : d.className();
                 json.append(String.format(
                         "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
                         shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
@@ -99,7 +101,8 @@ public class HtmlReporter {
                 nodes.append(",");
             firstNode = false;
 
-            String shortName = d.className().substring(d.className().lastIndexOf('.') + 1);
+            int lastSlash = d.className().lastIndexOf('/');
+            String shortName = lastSlash >= 0 ? d.className().substring(lastSlash + 1) : d.className();
             nodes.append(String.format(
                     "{\"id\":\"%s\",\"name\":\"%s\",\"riskScore\":%.2f,\"coupled\":%d,\"verdict\":\"%s\"}",
                     d.className(), shortName, d.riskScore(), d.coupledPeers(), d.verdict()));
@@ -403,7 +406,7 @@ public class HtmlReporter {
                                     callbacks: {
                                         label: function(context) {
                                             const d = context.raw;
-                                            return [d.label.split('.').pop(), `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
+                                            return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
                                         }
                                     }
                                 },
@@ -450,7 +453,7 @@ public class HtmlReporter {
 
                         tbody.innerHTML = filtered.map(d => `
                             <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                <td>${d.label.split('.').pop()}</td>
+                                <td>${d.label}</td>
                                 <td>${d.churn}</td>
                                 <td>${d.recentChurn}</td>
                                 <td>${d.riskScore.toFixed(1)}</td>
@@ -662,7 +665,7 @@ public class HtmlReporter {
                         const isHighROI = roi > 1000;
 
                                     const isBenign = d.verdict === 'OK' || d.verdict === 'ORCHESTRATOR' || d.verdict === 'DATA_CLASS' || d.verdict === 'CONFIGURATION';
-                        
+
                                     if (isHighROI && !isBenign) {
                                         steps.push({
                                             icon: '🔥',
@@ -670,23 +673,23 @@ public class HtmlReporter {
                                             desc: `Refactoring ROI is ${Math.round(roi)}. This file is complex AND changes often. Fixing this will dramatically reduce long-term maintenance costs.`
                                         });
                                     }
-                        
+
                                     // 1. Check LCOM4 (SRP Violated) - Suppress if Benign
                                     if (d.lcom4 > 1 && !d.isDataClass && d.verdict !== 'CONFIGURATION') {                                        let desc = `LCOM4 is ${d.lcom4.toFixed(1)}. This class likely handles ${Math.ceil(d.lcom4)} unrelated responsibilities. Group fields/methods by usage and extract.`;
-                        
+
                                         if (d.lcom4Blocks && d.lcom4Blocks.length > 1) {
                                             const componentsHtml = d.lcom4Blocks.map((block, index) => {
                                                 // Filter out noise (lambdas) for the display list
                                                 const cleanBlock = block.filter(m => !m.includes('lambda$'));
                                                 if (cleanBlock.length === 0) return ''; // Skip if only lambdas
-                        
+
                                                 return `<div style="margin-top:4px; padding:4px; background:white; border:1px solid #ddd; border-radius:3px;">
                                                     <strong>Group ${index + 1}:</strong> <span style="font-family:monospace; color:#555;">${cleanBlock.slice(0, 5).join(', ')}${cleanBlock.length > 5 ? '...' : ''}</span>
                                                  </div>`;
                                             }).filter(html => html !== '').join('');
                                             desc += `<div style="margin-top:8px;">${componentsHtml}</div>`;
                                         }
-                        
+
                                         steps.push({
                                             icon: '✂️',
                                             title: 'Split the Class',
