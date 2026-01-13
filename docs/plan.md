@@ -10,6 +10,17 @@ Transform the current Java-specific MVP into a **polyglot code forensic analyzer
 
 ---
 
+## ✅ Confirmed Decisions
+
+| Decision | Choice | Rationale |
+|----------|--------|----------|
+| **Core Language** | Java | Keep SootUp integration, leverage existing codebase |
+| **Priority Languages** | Java → Python → JavaScript/TypeScript | Most common in user's projects |
+| **Rule Engine** | Simple threshold-based, extensible | Start simple, add DSL later |
+| **Distribution** | JAR file | Standard Java ecosystem |
+
+---
+
 ## Current State Analysis
 
 ### What Exists
