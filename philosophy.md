@@ -73,7 +73,19 @@ Identify the subgroups (components) within the class and split them into separat
 
 ---
 
-### 5. Risk Score calculation
+### 5. Architectural Metrics (Coupling & Stability)
+Often used to measure the "modularity" of your code.
+
+-   **Fan-Out (Efferent Coupling)**: The number of other classes this class depends on (imports/uses). High fan-out means the class knows too much and is fragile to changes in dependencies.
+-   **Afferent Coupling**: The number of *other* classes that depend on *this* class. High afferent coupling means the class is critical/stable (changing it breaks many things).
+-   **Instability**: A ratio from 0 to 1.
+    -   `0`: Stable (Hard to change, many depend on it).
+    -   `1`: Unstable (Easy to change, depends on many, no one depends on it).
+    -   *Good architecture mixes stable core components with unstable (flexible) outer layers.*
+
+---
+
+### 6. Risk Score calculation
 **What is it?**
 The final verdict. It allows you to prioritize technical debt.
 
