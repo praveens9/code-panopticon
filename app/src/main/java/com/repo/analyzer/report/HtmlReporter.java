@@ -43,38 +43,26 @@ public class HtmlReporter {
     }
 
     private String convertToTreemapJson(List<AnalysisData> data) {
-        // Build hierarchical structure: root -> packages -> classes
-        Map<String, List<AnalysisData>> packageMap = new HashMap<>();
-
-        for (AnalysisData d : data) {
-            String pkg = extractPackage(d.className());
-            packageMap.computeIfAbsent(pkg, k -> new ArrayList<>()).add(d);
-        }
-
+        // Flat structure: Root -> Files
+        // No grouping by package/folder to ensure cleaner layout and better label
+        // visibility
         StringBuilder json = new StringBuilder("{\"name\":\"root\",\"children\":[");
-        boolean first = true;
-        for (Map.Entry<String, List<AnalysisData>> entry : packageMap.entrySet()) {
-            if (!first)
+
+        boolean firstClass = true;
+        for (AnalysisData d : data) {
+            // Skip test files if needed, or included? Assuming 'data' is already
+            // filtered/relevant
+            if (!firstClass)
                 json.append(",");
-            first = false;
+            firstClass = false;
 
-            json.append(String.format("{\"name\":\"%s\",\"children\":[", entry.getKey()));
-
-            boolean firstClass = true;
-            for (AnalysisData d : entry.getValue()) {
-                if (!firstClass)
-                    json.append(",");
-                firstClass = false;
-
-                String shortName = d.className(); // Use full path as requested
-                json.append(String.format(
-                        "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
-                        shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
-            }
-            json.append("]}");
+            String shortName = d.className(); // Full path
+            json.append(String.format(
+                    "{\"name\":\"%s\",\"value\":%.0f,\"riskScore\":%.2f,\"churn\":%d,\"complexity\":%.0f,\"verdict\":\"%s\",\"fullName\":\"%s\"}",
+                    shortName, d.loc(), d.riskScore(), d.churn(), d.totalCC(), d.verdict(), d.className()));
         }
-        json.append("]}");
 
+        json.append("]}");
         return json.toString();
     }
 
@@ -135,20 +123,6 @@ public class HtmlReporter {
         links.append("]");
 
         return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
-    }
-
-    private String extractPackage(String className) {
-        int lastDot = className.lastIndexOf('.');
-        if (lastDot > 0) {
-            String fullPkg = className.substring(0, lastDot);
-            // Get top 2-3 package levels for better grouping
-            String[] parts = fullPkg.split("\\.");
-            if (parts.length > 3) {
-                return String.join(".", Arrays.copyOfRange(parts, 0, Math.min(4, parts.length)));
-            }
-            return fullPkg;
-        }
-        return "default";
     }
 
     private static final String TEMPLATE = """
@@ -422,6 +396,53 @@ public class HtmlReporter {
                         },
                         plugins: [backgroundZones]
                     });
+
+                    // Side Panel Details
+                    function showDetails(d) {
+                        const panel = document.getElementById('detailsPanel');
+                        panel.classList.add('active');
+                        const content = document.getElementById('panelContent');
+                        content.innerHTML = `
+                            <div class="panel-header">
+                                <h2>${d.label}</h2>
+                                <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
+                            </div>
+                            <div class="stat-grid">
+                                <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
+                                <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                            </div>
+                            ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
+                            ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
+                            ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                            ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
+                            ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
+                            ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
+                            ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
+                            ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
+                            ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                            <div class="tips">
+                                <h4>Tips for Improvement:</h4>
+                                <ul>
+                                    <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
+                                    <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
+                                    <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
+                                    <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
+                                </ul>
+                            </div>
+                        `;
+                    }
+
+                    function hideDetails() {
+                        document.getElementById('detailsPanel').classList.remove('active');
+                    }
 
                     // Table rendering
                     function renderTable() {
@@ -772,7 +793,7 @@ public class HtmlReporter {
 
                         content.innerHTML = `
                             <div class="panel-header">
-                                <h2>${d.label.split('.').pop()}</h2>
+                                <h2>${d.label}</h2>
                                 <span class="verdict-badge ${badgeClass}">${d.verdict}</span>
                             </div>
 
