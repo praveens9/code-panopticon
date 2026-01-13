@@ -356,7 +356,7 @@ public class HtmlReporter {
                                     <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
                                 </div>
                                 <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
-                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Cmd/Ctrl + Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
                                 </div>
                                 <svg id="treemap"></svg>
                             </div>
