@@ -26,7 +26,7 @@ public class HtmlReporter {
         }
     }
 
-    private String convertToJson(List<AnalysisData> data) {
+    String convertToJson(List<AnalysisData> data) {
         return data.stream()
                 .map(d -> String.format(
                         "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f }",
@@ -42,7 +42,7 @@ public class HtmlReporter {
                 .collect(Collectors.joining(", ", "[", "]"));
     }
 
-    private String convertToHierarchyJson(List<AnalysisData> data) {
+    String convertToHierarchyJson(List<AnalysisData> data) {
         HierarchyNode root = new HierarchyNode("root", "root");
 
         for (AnalysisData d : data) {
