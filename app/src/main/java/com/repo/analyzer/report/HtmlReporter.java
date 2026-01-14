@@ -267,6 +267,7 @@ public class HtmlReporter {
                     .verdict-HIGH_COUPLING { background-color: #f39c12; }
                     .verdict-COMPLEX { background-color: #f1c40f; color: #333; }
                     .verdict-SPLIT_CANDIDATE { background-color: #9b59b6; }
+                    .verdict-FRAGILE_HUB { background-color: #e67e22; }
                     .verdict-BLOATED { background-color: #e74c3c; }
                     .verdict-DATA_CLASS { background-color: #3498db; }
                     .verdict-CONFIGURATION { background-color: #6c5ce7; }
@@ -884,13 +885,28 @@ public class HtmlReporter {
                     }
 
                     function diagnose(d) {
+                        // Core verdicts from ForensicRuleEngine
+                        if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic into a single module" };
+                        if (d.verdict === 'HIDDEN_DEPENDENCY') return { title: "Hidden Dependency", desc: "Temporal coupling without code link", why: `Changes with ${d.coupled} files but only ${d.fanOut} imports`, fix: "Make dependencies explicit via imports or extract shared logic" };
+                        if (d.verdict.startsWith('GOD_CLASS')) return { title: "God Class", desc: "Too many responsibilities", why: `Total CC ${d.y}, Fan-out ${d.fanOut}`, fix: "Full decomposition required" };
+                        if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split the class by responsibility" };
                         if (d.verdict === 'BRAIN_METHOD') return { title: "One-Method Monster", desc: "Contains massive methods", why: `Found ${d.brainMethods.length} complex methods`, fix: "Extract Method pattern" };
-                        if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic" };
-                        if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4}`, fix: "Split the class" };
-                                    if (d.verdict === 'DATA_CLASS') return { title: "Data Carrier", desc: "Mostly Getters/Setters", why: "80%+ of methods are boilerplate", fix: "Benign fragmentation. No action needed." };
-                                    if (d.verdict === 'CONFIGURATION') return { title: "App Blueprint", desc: "Spring @Configuration Class", why: "High fragmentation is expected for factory classes", fix: "Benign fragmentation. No action needed." };
-                                    if (d.verdict === 'ORCHESTRATOR') return { title: "Manager of Workers", desc: "Orchestrates complex flows", why: `High fan-out (${d.coupled}) but low internal complexity`, fix: "Maintainable pattern. Keep it cohesive." };                        if (d.verdict === 'GOD_CLASS') return { title: "God Class", desc: "Does everything", why: `Total CC ${d.y}`, fix: "Full refactor" };
-                        return { title: "Healthy Code", desc: "No major issues", why: "Metrics OK", fix: "Keep it up!" };
+                        if (d.verdict.startsWith('COMPLEX')) return { title: "Complex Code", desc: "High cyclomatic complexity", why: `Max CC = ${d.maxCC}`, fix: "Simplify conditionals, extract helper methods" };
+                        if (d.verdict === 'FRAGILE_HUB') return { title: "Fragile Hub", desc: "Central coordinator that changes often", why: `Fan-out ${d.fanOut}, Churn ${d.churn}`, fix: "Consider event-driven architecture or dependency injection" };
+                        if (d.verdict === 'SPLIT_CANDIDATE') return { title: "Split Candidate", desc: "Contains disconnected clusters", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split into separate classes based on field usage" };
+                        if (d.verdict === 'HIGH_COUPLING') return { title: "High Coupling", desc: "Too many dependencies", why: `Fan-out = ${d.fanOut}`, fix: "Reduce dependencies, use interfaces or dependency injection" };
+                        if (d.verdict === 'BLOATED') return { title: "Bloated File", desc: "Large file with many lines", why: `LOC = ${d.loc}`, fix: "Consider splitting into smaller, focused modules" };
+
+                        // Benign verdicts (special cases)
+                        if (d.verdict === 'DATA_CLASS') return { title: "Data Carrier", desc: "Mostly Getters/Setters", why: "80%+ of methods are boilerplate", fix: "Benign fragmentation. No action needed." };
+                        if (d.verdict === 'CONFIGURATION') return { title: "App Blueprint", desc: "Spring @Configuration Class", why: "High fragmentation is expected for factory classes", fix: "Benign fragmentation. No action needed." };
+                        if (d.verdict === 'ORCHESTRATOR') return { title: "Manager of Workers", desc: "Orchestrates complex flows", why: `High fan-out (${d.coupled}) but low internal complexity`, fix: "Maintainable pattern. Keep it cohesive." };
+
+                        // OK verdict - healthy code
+                        if (d.verdict === 'OK') return { title: "Healthy Code", desc: "No major issues", why: "Metrics OK", fix: "Keep it up!" };
+
+                        // Fallback for any unhandled verdict
+                        return { title: d.verdict, desc: "See metrics for details", why: "Custom or unrecognized verdict", fix: "Review metrics below" };
                     }
 
                     function getPrescriptions(d) {
