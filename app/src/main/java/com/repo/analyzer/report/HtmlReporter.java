@@ -312,6 +312,7 @@ public class HtmlReporter {
                     /* DataTable - Scrollable with Sticky Header */
                     #table-tab { max-height: 70vh; overflow-y: auto; }
                     table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+                    th { resize: horizontal; overflow: auto; min-width: 80px; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
                     th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
                     th:hover { background: #2c3e50; }
@@ -694,9 +695,11 @@ public class HtmlReporter {
                                                 return currentSort.ascending ? aVal - bVal : bVal - aVal;
                                             });
 
-                                            tbody.innerHTML = filtered.map(d => `
+                                            tbody.innerHTML = filtered.map(d => {
+                                                const fileName = d.label.split('/').pop();
+                                                return `
                                                 <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                                    <td>${d.label}</td>
+                                                    <td title="${d.label}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">${fileName}</td>
                                                     <td>${d.churn}</td>
                                                     <td>${d.recentChurn}</td>
                                                     <td>${d.riskScore.toFixed(1)}</td>
@@ -704,7 +707,7 @@ public class HtmlReporter {
                                                     <td>${d.lcom4.toFixed(1)}</td>
                                                     <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
                                                 </tr>
-                                            `).join('');
+                                            `;}).join('');
                                         }
 
                                         function sortTable(column) {
@@ -912,7 +915,10 @@ public class HtmlReporter {
                                                     .on('click', (event, d) => {
                                                         event.stopPropagation();
                                                         updateBreadcrumbs(d);
-                                                        zoom(event, d);
+                                                        // Fix: Zoom to parent if leaf node to maintain context
+                                                        if (d.children) zoom(event, d);
+                                                        else if (d.parent) zoom(event, d.parent);
+                                                        else zoom(event, d);
 
                                                         // RESTORED: Show details panel for files
                                                         if (!d.children) {
