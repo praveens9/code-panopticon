@@ -13,7 +13,7 @@ public class HtmlReporter {
         String treemapJson = convertToHierarchyJson(data);
         String networkJson = convertToNetworkJson(data);
 
-        String html = TEMPLATE
+        String html = new StringBuilder(TEMPLATE_HEAD).append(TEMPLATE_BODY).toString()
                 .replace("{{DATA_PLACEHOLDER}}", json)
                 .replace("{{TREEMAP_DATA}}", treemapJson)
                 .replace("{{NETWORK_DATA}}", networkJson);
@@ -185,7 +185,7 @@ public class HtmlReporter {
         return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
     }
 
-    private static final String TEMPLATE = """
+    private static final String TEMPLATE_HEAD = """
             <!DOCTYPE html>
             <html>
             <head>
@@ -308,12 +308,16 @@ public class HtmlReporter {
                     #network { display: block; }
                     .link { stroke: #999; stroke-opacity: 0.6; stroke-width: 1px; }
 
-                    /* DataTable */
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+
+                    /* DataTable - Scrollable with Sticky Header */
+                    #table-tab { max-height: 70vh; overflow-y: auto; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-                    th { background: #34495e; color: white; cursor: pointer; user-select: none; }
+                    th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
                     th:hover { background: #2c3e50; }
                     tr:hover { background: #f5f5f5; cursor: pointer; }
+                    td:first-child { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    td:first-child:hover { overflow: visible; white-space: normal; word-break: break-all; background: #fff; position: relative; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
                     .filter-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
                     .filter-row input, .filter-row select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
 
@@ -371,6 +375,9 @@ public class HtmlReporter {
                     .legend-color { width: 20px; height: 20px; border-radius: 3px; }
                 </style>
             </head>
+            """;
+
+    private static final String TEMPLATE_BODY = """
             <body>
                 <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
                     <div class="main-content">
@@ -493,8 +500,21 @@ public class HtmlReporter {
                         return '#27ae60'; // Green
                     };
 
-                    // Quadrant Chart (existing code)
+                    // Quadrant Chart with Dynamic Axis Scaling
                     const ctx = document.getElementById('riskChart').getContext('2d');
+
+                    // Calculate dynamic axis bounds based on data
+                    const maxChurn = Math.max(...rawData.map(d => d.x), 10);
+                    const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
+                    const xAxisMax = Math.ceil(maxChurn * 1.2);
+                    const yAxisMax = Math.ceil(maxComplexity * 1.1);
+
+                    // Calculate percentile-based dividers (75th percentile)
+                    const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
+                    const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
+                    const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
+                    const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+
                     const backgroundZones = {
                         id: 'backgroundZones',
                         beforeDraw: (chart) => {
@@ -502,8 +522,8 @@ public class HtmlReporter {
                             const chartArea = chart.chartArea;
                             const xScale = chart.scales.x;
                             const yScale = chart.scales.y;
-                            const xMid = xScale.getPixelForValue(10);
-                            const yMid = yScale.getPixelForValue(50);
+                            const xMid = xScale.getPixelForValue(churnDivider);
+                            const yMid = yScale.getPixelForValue(complexityDivider);
                             ctx.save();
                             ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
                             ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
@@ -545,14 +565,14 @@ public class HtmlReporter {
                                 legend: { display: false },
                                 annotation: {
                                     annotations: {
-                                        churnLine: { type: 'line', xMin: 10, xMax: 10, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
-                                        complexityLine: { type: 'line', yMin: 50, yMax: 50, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
+                                        churnLine: { type: 'line', xMin: churnDivider, xMax: churnDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
+                                        complexityLine: { type: 'line', yMin: complexityDivider, yMax: complexityDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
                                     }
                                 }
                             },
                             scales: {
-                                x: { title: { display: true, text: 'Churn' }, beginAtZero: true },
-                                y: { title: { display: true, text: 'Complexity' }, beginAtZero: true }
+                                x: { title: { display: true, text: 'Churn' }, min: 0, max: xAxisMax },
+                                y: { title: { display: true, text: 'Complexity' }, min: 0, max: yAxisMax }
                             }
                         },
                         plugins: [backgroundZones]
@@ -869,15 +889,27 @@ public class HtmlReporter {
                                         `;
                                     }
 
+                                    // Position tooltip with boundary detection to avoid blocking view
+                                    let tooltipX = event.pageX + 20;
+                                    const tooltipWidth = 280;
+                                    // Flip to left side if near right edge
+                                    if (tooltipX + tooltipWidth > window.innerWidth) {
+                                        tooltipX = event.pageX - tooltipWidth - 20;
+                                    }
                                     treemapTooltip
                                         .html(tooltipHtml)
                                         .style('opacity', 1)
-                                        .style('left', (event.pageX + 15) + 'px')
+                                        .style('left', tooltipX + 'px')
                                         .style('top', (event.pageY - 10) + 'px');
                                 })
                                 .on('mousemove', function(event) {
+                                    let tooltipX = event.pageX + 20;
+                                    const tooltipWidth = 280;
+                                    if (tooltipX + tooltipWidth > window.innerWidth) {
+                                        tooltipX = event.pageX - tooltipWidth - 20;
+                                    }
                                     treemapTooltip
-                                        .style('left', (event.pageX + 15) + 'px')
+                                        .style('left', tooltipX + 'px')
                                         .style('top', (event.pageY - 10) + 'px');
                                 })
                                 .on('mouseout', function(event, d) {
@@ -914,9 +946,9 @@ public class HtmlReporter {
                                     }
                                 });
 
-                            // Labels
+                            // Labels - show actual node name (filename for files, folder for packages)
                             const label = svg.append('g')
-                                .style('font', '12px sans-serif')
+                                .style('font', '10px sans-serif')
                                 .attr('pointer-events', 'none')
                                 .attr('text-anchor', 'middle')
                                 .selectAll('text')
@@ -925,9 +957,16 @@ public class HtmlReporter {
                                 .style('fill-opacity', d => d.parent === root ? 1 : 0)
                                 .style('display', d => d.parent === root ? 'inline' : 'none')
                                 .style('font-weight', d => d.children ? 'bold' : 'normal')
-                                .style('fill', '#2c3e50')
-                                .style('text-shadow', '0 1px 2px rgba(255,255,255,0.8)')
-                                .text(d => d.data.name);
+                                .style('fill', '#1a1a2e')
+                                .style('paint-order', 'stroke')
+                                .style('stroke', 'rgba(255,255,255,0.85)')
+                                .style('stroke-width', '2.5px')
+                                .text(d => {
+                                    // Show the node's OWN name (filename for files, folder name for directories)
+                                    const name = d.data.name;
+                                    // Truncate long names to prevent overlap
+                                    return name.length > 15 ? name.substring(0, 12) + '...' : name;
+                                });
 
                             // Initial Zoom
                             zoomTo([root.x, root.y, root.r * 2]);
@@ -938,8 +977,12 @@ public class HtmlReporter {
                                 focus = d;
 
                                 // Cinematic smooth zoom with d3.interpolateZoom
+                                // Use shorter duration for large datasets (performance optimization)
+                                const nodeCount = root.descendants().length;
+                                const duration = nodeCount > 500 ? 400 : 750;
+
                                 const transition = svg.transition()
-                                    .duration(750)
+                                    .duration(duration)
                                     .tween('zoom', () => {
                                         const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
                                         return t => zoomTo(i(t));
@@ -970,6 +1013,17 @@ public class HtmlReporter {
                                 label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
                                 node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
                                 node.attr('r', d => d.r * k);
+
+                                // Show labels on circles with visible radius > 20px (Fix 6)
+                                label.each(function(d) {
+                                    const visibleR = d.r * k;
+                                    const isLeaf = !d.children;
+                                    const shouldShow = (d.parent === focus) || (isLeaf && visibleR > 20);
+                                    d3.select(this)
+                                        .style('display', shouldShow ? 'inline' : 'none')
+                                        .style('fill-opacity', shouldShow ? Math.min(1, (visibleR - 15) / 20) : 0)
+                                        .style('font-size', Math.max(10, Math.min(14, visibleR / 3)) + 'px');
+                                });
                             }
 
                             function updateBreadcrumbs(n) {
@@ -1024,13 +1078,31 @@ public class HtmlReporter {
                         .attr('height', height);
 
                     if (!networkData.nodes || networkData.nodes.length === 0) {
-                        svg.append('text')
-                            .attr('x', container.clientWidth / 2)
-                            .attr('y', container.clientHeight / 2)
+                        const msgGroup = svg.append('g')
+                            .attr('transform', `translate(${width/2}, ${height/2})`);
+
+                        msgGroup.append('text')
                             .attr('text-anchor', 'middle')
-                            .text('No significant temporal coupling found in top risky classes')
-                            .style('font-size', '16px')
+                            .attr('y', -30)
+                            .text('📊 No Temporal Coupling Detected')
+                            .style('font-size', '18px')
+                            .style('font-weight', 'bold')
+                            .style('fill', '#666');
+
+                        msgGroup.append('text')
+                            .attr('text-anchor', 'middle')
+                            .attr('y', 5)
+                            .text('Temporal coupling requires files that change together frequently.')
+                            .style('font-size', '14px')
                             .style('fill', '#999');
+
+                        msgGroup.append('text')
+                            .attr('text-anchor', 'middle')
+                            .attr('y', 30)
+                            .text('Try running with deeper git history: --min-churn 2')
+                            .style('font-size', '13px')
+                            .style('fill', '#aaa')
+                            .style('font-style', 'italic');
                         return;
                     }
 
@@ -1074,43 +1146,112 @@ public class HtmlReporter {
                             .on('drag', dragged)
                             .on('end', dragended));
 
+                    // Network tooltip (Virtual Lens style)
+                    const networkTooltip = d3.select('body').append('div')
+                        .attr('class', 'treemap-tooltip')
+                        .style('opacity', 0)
+                        .style('z-index', '9999'); // Ensure tooltip is on top
+
+                    // Add nodes
                     const node = nodeGroup.append('circle')
                         .attr('class', 'node')
-                        .attr('r', d => Math.sqrt(d.riskScore) * 2 + 5)
-                        .attr('fill', d => getRiskColor(d.riskScore))
+                        .attr('r', d => Math.max(10, Math.sqrt(d.riskScore) * 4 + 8))
+                        .attr('fill', d => {
+                            // Non-linear gradient for better contrast
+                            // Using power 0.4 makes mid-range risks appear more colorful/intense
+                            const baseColor = getRiskColor(d);
+                            const maxRisk = Math.max(...networkData.nodes.map(n => n.riskScore)) || 100;
+                            const ratio = d.riskScore / maxRisk;
+                            const intensity = Math.pow(ratio, 0.4);
+                            // Interpolate between a light pastel (0.1) and full rich color
+                            return d3.interpolateRgb(d3.color(baseColor).brighter(1.5), baseColor)(0.2 + 0.8 * intensity);
+                        })
+                        .attr('stroke', '#fff')
+                        .attr('stroke-width', 2)
+                        .style('cursor', 'grab')
+                        .on('mouseover', function(event, d) {
+                            d3.select(this).attr('stroke-width', 4).attr('stroke', '#667');
+                            // Show tooltip with full path
+                            const verdictStyle = getVerdictBadgeStyle(d.verdict);
+                            networkTooltip
+                                .html(`
+                                    <div class="lens-title">${d.id}</div>
+                                    <div class="lens-metrics">
+                                        <div class="lens-metric">
+                                            <span class="lens-metric-value">${d.riskScore.toFixed(1)}</span>
+                                            <span class="lens-metric-label">Risk</span>
+                                        </div>
+                                        <div class="lens-metric">
+                                            <span class="lens-metric-value">${d.coupled}</span>
+                                            <span class="lens-metric-label">Coupled</span>
+                                        </div>
+                                    </div>
+                                    <div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${d.verdict}</div>
+                                `)
+                                .style('opacity', 1)
+                                .style('left', (event.pageX + 15) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                            // Ensure label is 100% visible on hover
+                            d3.select(this.parentNode).select('text').style('opacity', 1);
+                        })
+                        .on('mousemove', function(event) {
+                            networkTooltip
+                                .style('left', (event.pageX + 15) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                        })
+                        .on('mouseout', function(event, d) {
+                            d3.select(this).attr('stroke-width', 2).attr('stroke', '#fff');
+                            networkTooltip.style('opacity', 0);
+                            // Restore labels
+                            // connectedNodes logic might have dimmed them, so check if we are in a 'active' state
+                            // For simplicity, restore to 1 unless pinned/filtered logic is added later
+                             d3.select(this.parentNode).select('text').style('opacity', 1);
+                        })
                         .on('click', (event, d) => {
-                            event.stopPropagation(); // Prevent background click
+                            event.stopPropagation();
+                            d.pinned = !d.pinned; // Toggle pin state
                             const classData = rawData.find(r => r.label === d.id);
                             if (classData) showDetails(classData);
 
-                            // Highlight Logic
+                            // Highlight only immediate connections
                             const connectedNodes = new Set();
                             connectedNodes.add(d.id);
-
                             networkData.links.forEach(l => {
                                 if (l.source.id === d.id) connectedNodes.add(l.target.id);
                                 if (l.target.id === d.id) connectedNodes.add(l.source.id);
                             });
 
-                            node.style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.1);
-                            link.style('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.05);
-                            nodeGroup.selectAll('text').style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.1);
+                            node.transition().duration(200)
+                                .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.15);
+                            link.transition().duration(200)
+                                .style('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.08)
+                                .attr('stroke-width', l => (l.source.id === d.id || l.target.id === d.id) ? 3 : 1);
+
+                            // Dim labels of non-connected nodes instead of hiding them completely
+                            nodeGroup.selectAll('text').transition().duration(200)
+                                .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2);
                         });
 
-                    // Add text label
+                    // Add text label - ALL labels visible
                     nodeGroup.append('text')
-                        .text(d => d.name)
-                        .attr('x', d => Math.sqrt(d.riskScore) * 2 + 8)
+                        .text(d => {
+                            const parts = d.name.split('/');
+                            return parts[parts.length - 1]; // Short filename
+                        })
+                        .attr('x', d => Math.max(12, Math.sqrt(d.riskScore) * 4 + 12))
                         .attr('y', 4)
                         .attr('class', 'node-label')
-                        .style('font-size', '12px')
-                        .style('fill', '#333')
+                        .style('font-size', d => Math.max(9, Math.sqrt(d.riskScore) + 6) + 'px') // Dynamic font size
+                        .style('font-weight', 'bold')
+                        .style('fill', '#2c3e50') // Corrected property
+                        .style('opacity', 1) // Force 100% visibility
                         .style('pointer-events', 'none')
-                        .style('text-shadow', '1px 1px 2px white');
+                        .style('paint-order', 'stroke')
+                        .style('stroke', 'rgba(255,255,255,0.95)')
+                        .style('stroke-width', '2.5px');
 
                     // Add link titles
                     link.append('title').text('Temporally Coupled');
-                    node.append('title').text(d => d.name + ' (Risk: ' + d.riskScore.toFixed(1) + ')');
 
                     simulation.on('tick', () => {
                         link
@@ -1123,23 +1264,25 @@ public class HtmlReporter {
                             .attr('transform', d => `translate(${d.x},${d.y})`);
                     });
 
-                        function dragstarted(event, d) {
-                            if (!event.active) simulation.alphaTarget(0.3).restart();
-                            d.fx = d.x;
-                            d.fy = d.y;
-                        }
-
-                        function dragged(event, d) {
-                            d.fx = event.x;
-                            d.fy = event.y;
-                        }
-
-                        function dragended(event, d) {
-                            if (!event.active) simulation.alphaTarget(0);
-                            d.fx = null;
-                            d.fy = null;
-                        }
+                    function dragstarted(event, d) {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                        d3.select(event.sourceEvent.target).style('cursor', 'grabbing');
                     }
+
+                    function dragged(event, d) {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    }
+
+                    function dragended(event, d) {
+                        if (!event.active) simulation.alphaTarget(0);
+                        // STICKY: Keep position fixed where user dropped it
+                        // d.fx and d.fy remain set, so node stays in place
+                        d3.select(event.sourceEvent.target).style('cursor', 'grab');
+                    }
+                }
 
                     function diagnose(d) {
                         // Core verdicts from ForensicRuleEngine
