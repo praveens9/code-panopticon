@@ -368,7 +368,29 @@ public class HtmlReporter {
                     .tips h4 { margin: 0 0 5px 0; color: #f39c12; font-size: 0.9rem; }
 
                     .close-btn { align-self: flex-end; cursor: pointer; color: #999; font-size: 1.5rem; line-height: 1; border: none; background: none; }
-                    .close-btn:hover { color: #333; }
+                    .close-btn:hover { color: #555; }
+
+                    /* System Map HUD - Fixed Hover Inspector */
+                    #system-map-hud {
+                        position: absolute;
+                        bottom: 20px;
+                        left: 20px;
+                        width: 300px;
+                        background: rgba(255, 255, 255, 0.95);
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                        padding: 15px;
+                        z-index: 1000;
+                        backdrop-filter: blur(5px);
+                        display: none; /* Hidden by default */
+                        transition: opacity 0.2s ease;
+                    }
+                    #system-map-hud h3 { margin: 0 0 10px 0; font-size: 14px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                    .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+                    .hud-label { color: #7f8c8d; }
+                    .hud-value { font-weight: 600; color: #2d3436; }
+                    .hud-verdict { margin-top: 10px; padding: 4px 8px; border-radius: 4px; text-align: center; font-weight: bold; font-size: 11px; color: #fff; }
 
                     .legend { display: flex; gap: 20px; margin-top: 15px; flex-wrap: wrap; }
                     .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.9rem; }
@@ -377,815 +399,852 @@ public class HtmlReporter {
             </head>
             """;
 
-    private static final String TEMPLATE_BODY = """
-            <body>
-                <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
-                    <div class="main-content">
-                        <div class="container">
-                            <h1>Code Forensics: Risk Analysis</h1>
+    private static String TEMPLATE_BODY_PART1 = """
+                                <body>
+                                    <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
+                                        <div class="main-content">
+                                            <div class="container">
+                                                <h1>Code Forensics: Risk Analysis</h1>
 
-                            <div class="tabs">
-                                <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
-                                <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                <button class="tab" onclick="switchTab('network')">Network</button>
-                            </div>
-
-                            <!-- Quadrant Tab -->
-                            <div id="quadrant-tab" class="tab-content active">
-                                <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
-                                <div class="chart-container">
-                                    <canvas id="riskChart"></canvas>
-                                </div>
-                                <div class="legend">
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
-                                </div>
-                            </div>
-
-                            <!-- Table Tab -->
-                            <div id="table-tab" class="tab-content">
-                                <div class="filter-row">
-                                    <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
-                                    <select id="verdictFilter">
-                                        <option value="">All Verdicts</option>
-                                        <option value="TOTAL_MESS">TOTAL_MESS</option>
-                                        <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
-                                        <option value="BRAIN_METHOD">BRAIN_METHOD</option>
-                                        <option value="GOD_CLASS">GOD_CLASS</option>
-                                    </select>
-                                </div>
-                                <table id="dataTable">
-                                    <thead>
-                                        <tr>
-                                            <th onclick="sortTable(0)">Class Name ▼</th>
-                                            <th onclick="sortTable(1)">Churn ▼</th>
-                                            <th onclick="sortTable(2)">Recent Churn ▼</th>
-                                            <th onclick="sortTable(3)">Risk Score ▼</th>
-                                            <th onclick="sortTable(4)">Complexity ▼</th>
-                                            <th onclick="sortTable(5)">LCOM4 ▼</th>
-                                            <th onclick="sortTable(6)">Verdict ▼</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tableBody"></tbody>
-                                </table>
-                            </div>
-
-                            <!-- System Map Tab -->
-                            <!-- System Map Tab -->
-                            <div id="treemap-tab" class="tab-content">
-                                <div id="breadcrumbs"><span class="crumb">root</span></div>
-                                <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
-                                    <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
-                                </div>
-                                <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
-                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
-                                </div>
-                                <svg id="treemap"></svg>
-                            </div>
-
-                            <!-- Network Tab -->
-                            <div id="network-tab" class="tab-content">
-                                <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
-                                <div id="network-container">
-                                    <svg id="network"></svg>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div id="detailsPanel">
-                        <button class="close-btn" onclick="hideDetails()">&times;</button>
-                        <div id="panelContent"></div>
-                    </div>
-                </div>
-
-                <script>
-                    const rawData = {{DATA_PLACEHOLDER}};
-                    const treemapData = {{TREEMAP_DATA}};
-                    const networkData = {{NETWORK_DATA}};
-                    let currentSort = { column: 3, ascending: false };
-
-                    // Tab switching
-                    function switchTab(tabName) {
-                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-
-                        event.target.classList.add('active');
-                        document.getElementById(tabName + '-tab').classList.add('active');
-
-                        if (tabName === 'table') renderTable();
-                        if (tabName === 'treemap') renderTreemap();
-                        if (tabName === 'network') renderNetwork();
-                    }
-
-                    const getColor = (riskScore) => {
-                        // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
-                        if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
-                        if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
-                        return 'rgba(46, 204, 113, 0.7)'; // Green
-                    };
-
-                    const getRiskColor = (d) => {
-                        // Use Verdict for explicit coloring if available
-                        const v = d.verdict;
-                        if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
-                        if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
-
-                        // Fallback to numeric risk score
-                        const score = d.riskScore || 0;
-                        if (score > 20) return '#e74c3c';
-                        if (score > 5) return '#f39c12';
-                        return '#27ae60'; // Green
-                    };
-
-                    // Quadrant Chart with Dynamic Axis Scaling
-                    const ctx = document.getElementById('riskChart').getContext('2d');
-
-                    // Calculate dynamic axis bounds based on data
-                    const maxChurn = Math.max(...rawData.map(d => d.x), 10);
-                    const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
-                    const xAxisMax = Math.ceil(maxChurn * 1.2);
-                    const yAxisMax = Math.ceil(maxComplexity * 1.1);
-
-                    // Calculate percentile-based dividers (75th percentile)
-                    const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
-                    const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
-                    const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
-                    const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
-
-                    const backgroundZones = {
-                        id: 'backgroundZones',
-                        beforeDraw: (chart) => {
-                            const ctx = chart.ctx;
-                            const chartArea = chart.chartArea;
-                            const xScale = chart.scales.x;
-                            const yScale = chart.scales.y;
-                            const xMid = xScale.getPixelForValue(churnDivider);
-                            const yMid = yScale.getPixelForValue(complexityDivider);
-                            ctx.save();
-                            ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
-                            ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
-                            ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
-                            ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
-                            ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
-                            ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
-                            ctx.restore();
-                        }
-                    };
-
-                    const chart = new Chart(ctx, {
-                        type: 'bubble',
-                        data: {
-                            datasets: [{
-                                label: 'Classes',
-                                data: rawData,
-                                backgroundColor: rawData.map(d => getColor(d.riskScore)),
-                                borderColor: rawData.map(d => getColor(d.riskScore).replace('0.7', '1')),
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            onClick: (e) => {
-                                const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                                if (points.length) showDetails(rawData[points[0].index]);
-                            },
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const d = context.raw;
-                                            return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
-                                        }
-                                    }
-                                },
-                                legend: { display: false },
-                                annotation: {
-                                    annotations: {
-                                        churnLine: { type: 'line', xMin: churnDivider, xMax: churnDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
-                                        complexityLine: { type: 'line', yMin: complexityDivider, yMax: complexityDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: { title: { display: true, text: 'Churn' }, min: 0, max: xAxisMax },
-                                y: { title: { display: true, text: 'Complexity' }, min: 0, max: yAxisMax }
-                            }
-                        },
-                        plugins: [backgroundZones]
-                    });
-
-                    // Side Panel Details
-                    function showDetails(d) {
-                        const panel = document.getElementById('detailsPanel');
-                        panel.classList.add('active');
-                        const content = document.getElementById('panelContent');
-                        content.innerHTML = `
-                            <div class="panel-header">
-                                <h2>${d.label}</h2>
-                                <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
-                            </div>
-                            <div class="stat-grid">
-                                <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
-                            </div>
-                            ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
-                            ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
-                            ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
-                            ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
-                            ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
-                            ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
-                            ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
-                            ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
-                            ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
-                            <div class="tips">
-                                <h4>Tips for Improvement:</h4>
-                                <ul>
-                                    <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
-                                    <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
-                                    <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
-                                    <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
-                                </ul>
-                            </div>
-                        `;
-                    }
-
-                    function hideDetails() {
-                        document.getElementById('detailsPanel').classList.remove('active');
-                    }
-
-                    // Table rendering
-                    function renderTable() {
-                        const tbody = document.getElementById('tableBody');
-                        const classFilter = document.getElementById('classFilter').value.toLowerCase();
-                        const verdictFilter = document.getElementById('verdictFilter').value;
-
-                        let filtered = rawData.filter(d => {
-                            return d.label.toLowerCase().includes(classFilter) && (!verdictFilter || d.verdict === verdictFilter);
-                        });
-
-                        filtered.sort((a, b) => {
-                            let aVal, bVal;
-                            switch(currentSort.column) {
-                                case 0: aVal = a.label; bVal = b.label; break;
-                                case 1: aVal = a.churn; bVal = b.churn; break;
-                                case 2: aVal = a.recentChurn; bVal = b.recentChurn; break;
-                                case 3: aVal = a.riskScore; bVal = b.riskScore; break;
-                                case 4: aVal = a.y; bVal = b.y; break;
-                                case 5: aVal = a.lcom4; bVal = b.lcom4; break;
-                                case 6: aVal = a.verdict; bVal = b.verdict; break;
-                            }
-                            if (typeof aVal === 'string') return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                            return currentSort.ascending ? aVal - bVal : bVal - aVal;
-                        });
-
-                        tbody.innerHTML = filtered.map(d => `
-                            <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                <td>${d.label}</td>
-                                <td>${d.churn}</td>
-                                <td>${d.recentChurn}</td>
-                                <td>${d.riskScore.toFixed(1)}</td>
-                                <td>${d.y.toFixed(0)}</td>
-                                <td>${d.lcom4.toFixed(1)}</td>
-                                <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
-                            </tr>
-                        `).join('');
-                    }
-
-                    function sortTable(column) {
-                        if (currentSort.column === column) currentSort.ascending = !currentSort.ascending;
-                        else { currentSort.column = column; currentSort.ascending = false; }
-                        renderTable();
-                    }
-
-                    document.getElementById('classFilter').addEventListener('input', renderTable);
-                    document.getElementById('verdictFilter').addEventListener('change', renderTable);
-
-                    // System Map (Circle Packing) rendering - System Map 2.0
-                    let treemapTooltip = null;
-                    let resizeTimeout = null;
-
-                    // Debounce helper
-                    function debounce(fn, delay) {
-                        return function(...args) {
-                            clearTimeout(resizeTimeout);
-                            resizeTimeout = setTimeout(() => fn.apply(this, args), delay);
-                        };
-                    }
-
-                    // Responsive resize handler
-                    window.addEventListener('resize', debounce(() => {
-                        if (document.getElementById('treemap-tab').classList.contains('active')) {
-                            renderTreemap();
-                        }
-                    }, 250));
-
-                    function renderTreemap() {
-                        // 1. Validate Container & Dimensions
-                        const container = document.getElementById('treemap-tab');
-                        const svgEl = document.getElementById('treemap');
-                        if (!container || !svgEl) {
-                            console.error("Missing container or svg element");
-                            return;
-                        }
-
-                        let width = svgEl.clientWidth;
-                        let height = container.clientHeight - 80;
-
-                        // Robust fallback for hidden/unmounted state
-                        if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
-                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 80;
-                        if (height < 400) height = 600;
-
-                        // 2. Clear previous and create/get tooltip
-                        d3.select('#treemap').selectAll('*').remove();
-                        d3.select('#treemap')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('cursor', 'pointer');
-
-                        // Virtual Lens Tooltip - create once
-                        if (!treemapTooltip) {
-                            treemapTooltip = d3.select('body').append('div')
-                                .attr('class', 'virtual-lens');
-                        }
-
-                        // Modern pastel color scale for risk
-                        const getRiskColorPastel = (d) => {
-                            const v = d.verdict;
-                            // High risk - Soft Coral
-                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#ff7675';
-                            // Medium risk - Soft Amber
-                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY' || v === 'FRAGILE_HUB') return '#fdcb6e';
-                            // Special types
-                            if (v === 'DATA_CLASS') return '#74b9ff';
-                            if (v === 'CONFIGURATION') return '#a29bfe';
-                            if (v === 'ORCHESTRATOR') return '#81ecec';
-                            // OK - Mint Green
-                            if (v === 'OK') return '#00b894';
-                            // Fallback by score
-                            const score = d.riskScore || 0;
-                            if (score > 20) return '#ff7675';
-                            if (score > 5) return '#fdcb6e';
-                            return '#00b894';
-                        };
-
-                        // Verdict badge color for tooltip
-                        const getVerdictBadgeStyle = (verdict) => {
-                            const colors = {
-                                'TOTAL_MESS': { bg: '#ff7675', text: '#fff' },
-                                'SHOTGUN_SURGERY': { bg: '#e17055', text: '#fff' },
-                                'BRAIN_METHOD': { bg: '#a29bfe', text: '#fff' },
-                                'GOD_CLASS': { bg: '#636e72', text: '#fff' },
-                                'HIDDEN_DEPENDENCY': { bg: '#fdcb6e', text: '#2d3436' },
-                                'HIGH_COUPLING': { bg: '#ffeaa7', text: '#2d3436' },
-                                'COMPLEX': { bg: '#fab1a0', text: '#2d3436' },
-                                'SPLIT_CANDIDATE': { bg: '#d63031', text: '#fff' },
-                                'FRAGILE_HUB': { bg: '#e17055', text: '#fff' },
-                                'BLOATED': { bg: '#ff7675', text: '#fff' },
-                                'DATA_CLASS': { bg: '#74b9ff', text: '#fff' },
-                                'CONFIGURATION': { bg: '#a29bfe', text: '#fff' },
-                                'ORCHESTRATOR': { bg: '#81ecec', text: '#2d3436' },
-                                'OK': { bg: '#00b894', text: '#fff' }
-                            };
-                            return colors[verdict] || { bg: '#636e72', text: '#fff' };
-                        };
-
-                        try {
-                            // 3. Data Check
-                            if (!treemapData || !treemapData.children) {
-                                throw new Error("No hierarchical data available");
-                            }
-
-                            // 4. Setup Hierarchy
-                            const root = d3.hierarchy(treemapData)
-                                .sum(d => d.value || 0)
-                                .sort((a, b) => b.value - a.value);
-
-                            let focus = root;
-                            let view;
-
-                            // 5. Layout
-                            const pack = d3.pack()
-                                .size([width, height])
-                                .padding(3);
-
-                            pack(root);
-
-                            // 6. Rendering
-                            const svg = d3.select('#treemap');
-
-                            // Background click handler
-                            svg.on('click', (event) => zoom(event, root));
-
-                            // Helper: Check if node is descendant of target
-                            const isDescendantOf = (node, target) => {
-                                let current = node;
-                                while (current) {
-                                    if (current === target) return true;
-                                    current = current.parent;
-                                }
-                                return false;
-                            };
-
-                            // Circles
-                            const node = svg.append('g')
-                                .selectAll('circle')
-                                .data(root.descendants())
-                                .join('circle')
-                                .attr('class', d => d.children ? 'node' : 'node node--leaf')
-                                .attr('fill', d => {
-                                    if (d.children) return '#dfe6e9'; // Soft gray for packages
-                                    try { return getRiskColorPastel(d.data); } catch(e) { return '#b2bec3'; }
-                                })
-                                .attr('stroke', d => d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
-                                .attr('stroke-width', d => d.children ? 1 : 2)
-                                .style('opacity', 1)
-                                .on('mouseover', function(event, d) {
-                                    // Hover glow effect
-                                    const fillColor = d.children ? '#b2bec3' : getRiskColorPastel(d.data);
-                                    d3.select(this)
-                                        .attr('stroke', fillColor)
-                                        .attr('stroke-width', 4)
-                                        .style('filter', d.children ? 'none' : 'drop-shadow(0 0 10px ' + fillColor + ')');
-
-                                    // Show Virtual Lens Tooltip
-                                    const nodeData = d.data;
-                                    const isLeaf = !d.children;
-                                    const fullData = isLeaf ? rawData.find(r => r.label === nodeData.fullName || r.label === nodeData.name) : null;
-
-                                    let tooltipHtml = `<div class="lens-title">${nodeData.name}</div>`;
-
-                                    if (isLeaf && fullData) {
-                                        const verdictStyle = getVerdictBadgeStyle(fullData.verdict);
-                                        tooltipHtml += `
-                                            <div class="lens-metrics">
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${fullData.churn}</span>
-                                                    <span class="lens-metric-label">Churn</span>
+                                                <div class="tabs">
+                                                    <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
+                                                    <button class="tab" onclick="switchTab('table')">Data Table</button>
+                                                    <button class="tab" onclick="switchTab('treemap')">System Map</button>
+                                                    <button class="tab" onclick="switchTab('network')">Network</button>
                                                 </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${fullData.y.toFixed(0)}</span>
-                                                    <span class="lens-metric-label">Complexity</span>
+
+                                                <!-- Quadrant Tab -->
+                                                <div id="quadrant-tab" class="tab-content active">
+                                                    <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
+                                                    <div class="chart-container">
+                                                        <canvas id="riskChart"></canvas>
+                                                    </div>
+                                                    <div class="legend">
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
+                                                    </div>
                                                 </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${fullData.riskScore.toFixed(1)}</span>
-                                                    <span class="lens-metric-label">Risk</span>
+
+                                                <!-- Table Tab -->
+                                                <div id="table-tab" class="tab-content">
+                                                    <div class="filter-row">
+                                                        <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
+                                                        <select id="verdictFilter">
+                                                            <option value="">All Verdicts</option>
+                                                            <option value="TOTAL_MESS">TOTAL_MESS</option>
+                                                            <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
+                                                            <option value="BRAIN_METHOD">BRAIN_METHOD</option>
+                                                            <option value="GOD_CLASS">GOD_CLASS</option>
+                                                        </select>
+                                                    </div>
+                                                    <table id="dataTable">
+                                                        <thead>
+                                                            <tr>
+                                                                <th onclick="sortTable(0)">Class Name ▼</th>
+                                                                <th onclick="sortTable(1)">Churn ▼</th>
+                                                                <th onclick="sortTable(2)">Recent Churn ▼</th>
+                                                                <th onclick="sortTable(3)">Risk Score ▼</th>
+                                                                <th onclick="sortTable(4)">Complexity ▼</th>
+                                                                <th onclick="sortTable(5)">LCOM4 ▼</th>
+                                                                <th onclick="sortTable(6)">Verdict ▼</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="tableBody"></tbody>
+                                                    </table>
+                                                </div>
+
+                                                <!-- System Map Tab -->
+                                                <div id="treemap-tab" class="tab-content">
+                                                    <div class="row">
+                                                        <div class="col-md-12">
+                                                            <div class="card">
+                                                                <div class="card-header">
+                                                                    <div class="breadcrumbs" id="breadcrumbs">
+                                                                        <span class="crumb active">root</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <div id="treemap-container">
+                                                                        <div id="loading">Loading visualization...</div>
+                                                                        <svg id="treemap"></svg>
+                                                                        <div id="system-map-hud">
+                                                                            <!-- HUD Content populated by JS -->
+                                                                            <h3>Hover over a file</h3>
+                                                                            <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                                        <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                                    </div>
+                                                    <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                                        👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                                    </div>
+                                                </div>
+
+                                                <!-- Network Tab -->
+                                                <div id="network-tab" class="tab-content">
+                                                    <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
+                                                    <div id="network-container">
+                                                        <svg id="network"></svg>
+                                                    </div>
                                                 </div>
                                             </div>
-                                            <div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${fullData.verdict}</div>
-                                        `;
-                                    } else if (isLeaf) {
-                                        tooltipHtml += `
-                                            <div class="lens-metrics">
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${(nodeData.churn || 0)}</span>
-                                                    <span class="lens-metric-label">Churn</span>
-                                                </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${(nodeData.complexity || 0).toFixed(0)}</span>
-                                                    <span class="lens-metric-label">Complexity</span>
-                                                </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${(nodeData.riskScore || 0).toFixed(1)}</span>
-                                                    <span class="lens-metric-label">Risk</span>
-                                                </div>
-                                            </div>
-                                        `;
-                                        if (nodeData.verdict) {
-                                            const verdictStyle = getVerdictBadgeStyle(nodeData.verdict);
-                                            tooltipHtml += `<div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${nodeData.verdict}</div>`;
-                                        }
-                                    } else {
-                                        // Package tooltip - show children count and total LOC
-                                        const childCount = d.descendants().filter(n => !n.children).length;
-                                        tooltipHtml += `
-                                            <div class="lens-metrics">
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${childCount}</span>
-                                                    <span class="lens-metric-label">Files</span>
-                                                </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${d.value.toLocaleString()}</span>
-                                                    <span class="lens-metric-label">Total LOC</span>
-                                                </div>
-                                                <div class="lens-metric">
-                                                    <span class="lens-metric-value">${d.children.length}</span>
-                                                    <span class="lens-metric-label">Children</span>
-                                                </div>
-                                            </div>
-                                            <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 4px;">📁 Click to explore</div>
-                                        `;
-                                    }
-
-                                    // Position tooltip with boundary detection to avoid blocking view
-                                    let tooltipX = event.pageX + 20;
-                                    const tooltipWidth = 280;
-                                    // Flip to left side if near right edge
-                                    if (tooltipX + tooltipWidth > window.innerWidth) {
-                                        tooltipX = event.pageX - tooltipWidth - 20;
-                                    }
-                                    treemapTooltip
-                                        .html(tooltipHtml)
-                                        .style('opacity', 1)
-                                        .style('left', tooltipX + 'px')
-                                        .style('top', (event.pageY - 10) + 'px');
-                                })
-                                .on('mousemove', function(event) {
-                                    let tooltipX = event.pageX + 20;
-                                    const tooltipWidth = 280;
-                                    if (tooltipX + tooltipWidth > window.innerWidth) {
-                                        tooltipX = event.pageX - tooltipWidth - 20;
-                                    }
-                                    treemapTooltip
-                                        .style('left', tooltipX + 'px')
-                                        .style('top', (event.pageY - 10) + 'px');
-                                })
-                                .on('mouseout', function(event, d) {
-                                    d3.select(this)
-                                        .attr('stroke', d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
-                                        .attr('stroke-width', d.children ? 1 : 2)
-                                        .style('filter', 'none');
-
-                                    treemapTooltip.style('opacity', 0);
-                                })
-                                .on('click', (event, d) => {
-                                    const isLeaf = !d.children || d.height === 0;
-                                    const isCmdClick = event.metaKey || event.ctrlKey;
-
-                                    if (isLeaf || isCmdClick) {
-                                        event.stopPropagation();
-
-                                        if (isLeaf) {
-                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
-                                            if (classData) {
-                                                showDetails(classData);
-                                            } else {
-                                                console.warn("Details not found for " + d.data.name);
-                                            }
-                                        } else if (isCmdClick) {
-                                            console.log("Folder selected: " + d.data.name);
-                                        }
-                                        return;
-                                    }
-
-                                    if (focus !== d) {
-                                        zoom(event, d);
-                                        event.stopPropagation();
-                                    }
-                                });
-
-                            // Labels - show actual node name (filename for files, folder for packages)
-                            const label = svg.append('g')
-                                .style('font', '10px sans-serif')
-                                .attr('pointer-events', 'none')
-                                .attr('text-anchor', 'middle')
-                                .selectAll('text')
-                                .data(root.descendants())
-                                .join('text')
-                                .style('fill-opacity', d => d.parent === root ? 1 : 0)
-                                .style('display', d => d.parent === root ? 'inline' : 'none')
-                                .style('font-weight', d => d.children ? 'bold' : 'normal')
-                                .style('fill', '#1a1a2e')
-                                .style('paint-order', 'stroke')
-                                .style('stroke', 'rgba(255,255,255,0.85)')
-                                .style('stroke-width', '2.5px')
-                                .text(d => {
-                                    // Show the node's OWN name (filename for files, folder name for directories)
-                                    const name = d.data.name;
-                                    // Truncate long names to prevent overlap
-                                    return name.length > 15 ? name.substring(0, 12) + '...' : name;
-                                });
-
-                            // Initial Zoom
-                            zoomTo([root.x, root.y, root.r * 2]);
-
-                            // --- Helper Functions ---
-
-                            function zoom(event, d) {
-                                focus = d;
-
-                                // Cinematic smooth zoom with d3.interpolateZoom
-                                // Use shorter duration for large datasets (performance optimization)
-                                const nodeCount = root.descendants().length;
-                                const duration = nodeCount > 500 ? 400 : 750;
-
-                                const transition = svg.transition()
-                                    .duration(duration)
-                                    .tween('zoom', () => {
-                                        const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
-                                        return t => zoomTo(i(t));
-                                    });
-
-                                // Fade effect for non-relevant siblings
-                                node.transition(transition)
-                                    .style('opacity', n => {
-                                        // Always show root and current focus tree
-                                        if (n === root || isDescendantOf(n, focus) || isDescendantOf(focus, n)) return 1;
-                                        // Fade siblings
-                                        return 0.15;
-                                    });
-
-                                // Label transitions
-                                label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
-                                     .transition(transition)
-                                     .style('fill-opacity', d => d.parent === focus ? 1 : 0)
-                                     .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
-                                     .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
-
-                                updateBreadcrumbs(d);
-                            }
-
-                            function zoomTo(v) {
-                                const k = Math.min(width, height) / v[2];
-                                view = v;
-                                label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
-                                node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
-                                node.attr('r', d => d.r * k);
-
-                                // Show labels on circles with visible radius > 20px (Fix 6)
-                                label.each(function(d) {
-                                    const visibleR = d.r * k;
-                                    const isLeaf = !d.children;
-                                    const shouldShow = (d.parent === focus) || (isLeaf && visibleR > 20);
-                                    d3.select(this)
-                                        .style('display', shouldShow ? 'inline' : 'none')
-                                        .style('fill-opacity', shouldShow ? Math.min(1, (visibleR - 15) / 20) : 0)
-                                        .style('font-size', Math.max(10, Math.min(14, visibleR / 3)) + 'px');
-                                });
-                            }
-
-                            function updateBreadcrumbs(n) {
-                                const bc = d3.select('#breadcrumbs');
-                                bc.selectAll('*').remove();
-                                const path = [];
-                                let curr = n;
-                                while(curr) { path.unshift(curr); curr = curr.parent; }
-
-                                path.forEach((node, i) => {
-                                    const isLast = i === path.length - 1;
-                                    const span = bc.append('span')
-                                        .text(node.data.name)
-                                        .attr('class', 'crumb')
-                                        .style('cursor', isLast ? 'default' : 'pointer');
-                                    if (!isLast) {
-                                        span.on('click', (e) => {
-                                            e.stopPropagation();
-                                            zoom(e, node);
-                                        });
-                                        bc.append('span').text('›').attr('class', 'crumb-separator');
-                                    }
-                                });
-                            }
-
-                            // Init Breadcrumbs
-                            updateBreadcrumbs(root);
-
-                        } catch (e) {
-                            console.error("Render Error:", e);
-                            d3.select('#treemap')
-                                .append('text')
-                                .attr('x', width / 2).attr('y', height / 2)
-                                .attr('text-anchor', 'middle')
-                                .attr('fill', '#ff7675')
-                                .style('font-size', '18px')
-                                .text('Error: ' + e.message);
-                        }
-                    }
-
-
-                // Network rendering
-                function renderNetwork() {
-                    const container = document.getElementById('network-container');
-                    const width = container.clientWidth || 800;
-                    const height = container.clientHeight || 600;
-
-                    d3.select('#network').selectAll('*').remove();
-
-                    const svg = d3.select('#network')
-                        .attr('width', width)
-                        .attr('height', height);
-
-                    if (!networkData.nodes || networkData.nodes.length === 0) {
-                        const msgGroup = svg.append('g')
-                            .attr('transform', `translate(${width/2}, ${height/2})`);
-
-                        msgGroup.append('text')
-                            .attr('text-anchor', 'middle')
-                            .attr('y', -30)
-                            .text('📊 No Temporal Coupling Detected')
-                            .style('font-size', '18px')
-                            .style('font-weight', 'bold')
-                            .style('fill', '#666');
-
-                        msgGroup.append('text')
-                            .attr('text-anchor', 'middle')
-                            .attr('y', 5)
-                            .text('Temporal coupling requires files that change together frequently.')
-                            .style('font-size', '14px')
-                            .style('fill', '#999');
-
-                        msgGroup.append('text')
-                            .attr('text-anchor', 'middle')
-                            .attr('y', 30)
-                            .text('Try running with deeper git history: --min-churn 2')
-                            .style('font-size', '13px')
-                            .style('fill', '#aaa')
-                            .style('font-style', 'italic');
-                        return;
-                    }
-
-                    // Add zoom behavior
-                    const g = svg.append('g');
-                    svg.call(d3.zoom()
-                        .extent([[0, 0], [width, height]])
-                        .scaleExtent([0.1, 4])
-                        .on('zoom', (event) => g.attr('transform', event.transform)))
-                        .on('click', (event) => {
-                            if (event.target.tagName !== 'circle') {
-                                // Reset highlights on background click
-                                node.style('opacity', 1);
-                                link.style('opacity', 1);
-                                nodeGroup.selectAll('text').style('opacity', 1);
-                            }
-                        });
-
-                    const simulation = d3.forceSimulation(networkData.nodes)
-                        .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
-                        .force('charge', d3.forceManyBody().strength(-300))
-                        .force('center', d3.forceCenter(width / 2, height / 2))
-                        .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
-
-                    const link = g.append('g')
-                        .attr('class', 'links')
-                        .selectAll('line')
-                        .data(networkData.links)
-                        .join('line')
-                        .attr('class', 'link')
-                        .attr('stroke-width', d => Math.sqrt(d.value));
-
-                    // Add node groups to hold circle and text
-                    const nodeGroup = g.append('g')
-                        .attr('class', 'nodes')
-                        .selectAll('g')
-                        .data(networkData.nodes)
-                        .join('g')
-                        .call(d3.drag()
-                            .on('start', dragstarted)
-                            .on('drag', dragged)
-                            .on('end', dragended));
-
-                    // Network tooltip (Virtual Lens style)
-                    const networkTooltip = d3.select('body').append('div')
-                        .attr('class', 'treemap-tooltip')
-                        .style('opacity', 0)
-                        .style('z-index', '9999'); // Ensure tooltip is on top
-
-                    // Add nodes
-                    const node = nodeGroup.append('circle')
-                        .attr('class', 'node')
-                        .attr('r', d => Math.max(10, Math.sqrt(d.riskScore) * 4 + 8))
-                        .attr('fill', d => {
-                            // Non-linear gradient for better contrast
-                            // Using power 0.4 makes mid-range risks appear more colorful/intense
-                            const baseColor = getRiskColor(d);
-                            const maxRisk = Math.max(...networkData.nodes.map(n => n.riskScore)) || 100;
-                            const ratio = d.riskScore / maxRisk;
-                            const intensity = Math.pow(ratio, 0.4);
-                            // Interpolate between a light pastel (0.1) and full rich color
-                            return d3.interpolateRgb(d3.color(baseColor).brighter(1.5), baseColor)(0.2 + 0.8 * intensity);
-                        })
-                        .attr('stroke', '#fff')
-                        .attr('stroke-width', 2)
-                        .style('cursor', 'grab')
-                        .on('mouseover', function(event, d) {
-                            d3.select(this).attr('stroke-width', 4).attr('stroke', '#667');
-                            // Show tooltip with full path
-                            const verdictStyle = getVerdictBadgeStyle(d.verdict);
-                            networkTooltip
-                                .html(`
-                                    <div class="lens-title">${d.id}</div>
-                                    <div class="lens-metrics">
-                                        <div class="lens-metric">
-                                            <span class="lens-metric-value">${d.riskScore.toFixed(1)}</span>
-                                            <span class="lens-metric-label">Risk</span>
                                         </div>
-                                        <div class="lens-metric">
-                                            <span class="lens-metric-value">${d.coupled}</span>
-                                            <span class="lens-metric-label">Coupled</span>
+
+                                        <div id="detailsPanel">
+                                            <button class="close-btn" onclick="hideDetails()">&times;</button>
+                                            <div id="panelContent"></div>
                                         </div>
                                     </div>
+
+                                    <script>
+                                        const rawData = {{DATA_PLACEHOLDER}};
+                                        const treemapData = {{TREEMAP_DATA}};
+                                        const networkData = {{NETWORK_DATA}};
+                                        let currentSort = { column: 3, ascending: false };
+
+                                        // Fix: Hide loading overlay immediately as data is embedded
+                                        try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
+
+                                        // Tab switching
+                                        function switchTab(tabName) {
+                                            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                                            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+
+                                            event.target.classList.add('active');
+                                            document.getElementById(tabName + '-tab').classList.add('active');
+
+                                            if (tabName === 'table') renderTable();
+                                            if (tabName === 'treemap') renderTreemap();
+                                            if (tabName === 'network') renderNetwork();
+                                        }
+
+                                        const getColor = (riskScore) => {
+                                            // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                                            if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                                            if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                                            return 'rgba(46, 204, 113, 0.7)'; // Green
+                                        };
+
+                                        const getRiskColor = (d) => {
+                                            // Use Verdict for explicit coloring if available
+                                            const v = d.verdict;
+                                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+
+                                            // Fallback to numeric risk score
+                                            const score = d.riskScore || 0;
+                                            if (score > 20) return '#e74c3c';
+                                            if (score > 5) return '#f39c12';
+                                            return '#27ae60'; // Green
+                                        };
+
+                                        // Quadrant Chart with Dynamic Axis Scaling
+                                        const ctx = document.getElementById('riskChart').getContext('2d');
+
+                                        // Calculate dynamic axis bounds based on data
+                                        const maxChurn = Math.max(...rawData.map(d => d.x), 10);
+                                        const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
+                                        const xAxisMax = Math.ceil(maxChurn * 1.2);
+                                        const yAxisMax = Math.ceil(maxComplexity * 1.1);
+
+                                        // Calculate percentile-based dividers (75th percentile)
+                                        const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
+                                        const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
+                                        const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
+                                        const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+
+                                        const backgroundZones = {
+                                            id: 'backgroundZones',
+                                            beforeDraw: (chart) => {
+                                                const ctx = chart.ctx;
+                                                const chartArea = chart.chartArea;
+                                                const xScale = chart.scales.x;
+                                                const yScale = chart.scales.y;
+                                                const xMid = xScale.getPixelForValue(churnDivider);
+                                                const yMid = yScale.getPixelForValue(complexityDivider);
+                                                ctx.save();
+                                                ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+                                                ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
+                                                ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
+                                                ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
+                                                ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+                                                ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
+                                                ctx.restore();
+                                            }
+                                        };
+
+                                        const chart = new Chart(ctx, {
+                                            type: 'bubble',
+                                            data: {
+                                                datasets: [{
+                                                    label: 'Classes',
+                                                    data: rawData,
+                                                    backgroundColor: rawData.map(d => getColor(d.riskScore)),
+                                                    borderColor: rawData.map(d => getColor(d.riskScore).replace('0.7', '1')),
+                                                    borderWidth: 1
+                                                }]
+                                            },
+                                            options: {
+                                                responsive: true,
+                                                maintainAspectRatio: false,
+                                                onClick: (e) => {
+                                                    const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                                                    if (points.length) showDetails(rawData[points[0].index]);
+                                                },
+                                                plugins: {
+                                                    tooltip: {
+                                                        callbacks: {
+                                                            label: function(context) {
+                                                                const d = context.raw;
+                                                                return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
+                                                            }
+                                                        }
+                                                    },
+                                                    legend: { display: false },
+                                                    annotation: {
+                                                        annotations: {
+                                                            churnLine: { type: 'line', xMin: churnDivider, xMax: churnDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
+                                                            complexityLine: { type: 'line', yMin: complexityDivider, yMax: complexityDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
+                                                        }
+                                                    }
+                                                },
+                                                scales: {
+                                                    x: { title: { display: true, text: 'Churn' }, min: 0, max: xAxisMax },
+                                                    y: { title: { display: true, text: 'Complexity' }, min: 0, max: yAxisMax }
+                                                }
+                                            },
+                                            plugins: [backgroundZones]
+                                        });
+
+                                        // Side Panel Details
+                                        function showDetails(d) {
+                                            const panel = document.getElementById('detailsPanel');
+                                            panel.classList.add('active');
+                                            const content = document.getElementById('panelContent');
+                                            content.innerHTML = `
+                                                <div class="panel-header">
+                                                    <h2>${d.label}</h2>
+                                                    <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
+                                                </div>
+                                                <div class="stat-grid">
+                                                    <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                                                </div>
+                                                ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
+                                                ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
+                                                ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                                                ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
+                                                ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
+                                                ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
+                                                ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
+                                                ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
+                                                ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                                                <div class="tips">
+                                                    <h4>Tips for Improvement:</h4>
+                                                    <ul>
+                                                        <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
+                                                        <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
+                                                        <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
+                                                        <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
+                                                    </ul>
+                                                </div>
+                                            `;
+                                        }
+
+                                        function hideDetails() {
+                                            document.getElementById('detailsPanel').classList.remove('active');
+                                        }
+
+                                        // Table rendering
+                                        function renderTable() {
+                                            const tbody = document.getElementById('tableBody');
+                                            const classFilter = document.getElementById('classFilter').value.toLowerCase();
+                                            const verdictFilter = document.getElementById('verdictFilter').value;
+
+                                            let filtered = rawData.filter(d => {
+                                                return d.label.toLowerCase().includes(classFilter) && (!verdictFilter || d.verdict === verdictFilter);
+                                            });
+
+                                            filtered.sort((a, b) => {
+                                                let aVal, bVal;
+                                                switch(currentSort.column) {
+                                                    case 0: aVal = a.label; bVal = b.label; break;
+                                                    case 1: aVal = a.churn; bVal = b.churn; break;
+                                                    case 2: aVal = a.recentChurn; bVal = b.recentChurn; break;
+                                                    case 3: aVal = a.riskScore; bVal = b.riskScore; break;
+                                                    case 4: aVal = a.y; bVal = b.y; break;
+                                                    case 5: aVal = a.lcom4; bVal = b.lcom4; break;
+                                                    case 6: aVal = a.verdict; bVal = b.verdict; break;
+                                                }
+                                                if (typeof aVal === 'string') return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                                                return currentSort.ascending ? aVal - bVal : bVal - aVal;
+                                            });
+
+                                            tbody.innerHTML = filtered.map(d => `
+                                                <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
+                                                    <td>${d.label}</td>
+                                                    <td>${d.churn}</td>
+                                                    <td>${d.recentChurn}</td>
+                                                    <td>${d.riskScore.toFixed(1)}</td>
+                                                    <td>${d.y.toFixed(0)}</td>
+                                                    <td>${d.lcom4.toFixed(1)}</td>
+                                                    <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
+                                                </tr>
+                                            `).join('');
+                                        }
+
+                                        function sortTable(column) {
+                                            if (currentSort.column === column) currentSort.ascending = !currentSort.ascending;
+                                            else { currentSort.column = column; currentSort.ascending = false; }
+                                            renderTable();
+                                        }
+
+                                        document.getElementById('classFilter').addEventListener('input', renderTable);
+                                        document.getElementById('verdictFilter').addEventListener('change', renderTable);
+
+                                        // System Map (Circle Packing) rendering - System Map 2.0
+                                        let treemapTooltip = null;
+                                        let resizeTimeout = null;
+                                        let systemMapHud = null;
+
+                                        // Debounce helper
+                                        function debounce(fn, delay) {
+                                            return function(...args) {
+                                                clearTimeout(resizeTimeout);
+                                                resizeTimeout = setTimeout(() => fn.apply(this, args), delay);
+                                            };
+                                        }
+
+                                        // Responsive resize handler
+                                        window.addEventListener('resize', debounce(() => {
+                                            if (document.getElementById('treemap-tab').classList.contains('active')) {
+                                                renderTreemap();
+                                            }
+                                        }, 250));
+
+                                        function renderTreemap() {
+                                            // 1. Validate Container & Dimensions
+                                            const container = document.getElementById('treemap-tab');
+                                            const svgEl = document.getElementById('treemap');
+                                            if (!container || !svgEl) {
+                                                console.error("Missing container or svg element");
+                                                return;
+                                            }
+
+                                            let width = svgEl.clientWidth;
+                                            let height = container.clientHeight - 80;
+
+                                            // Robust fallback for hidden/unmounted state
+                                            if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
+                                            if (!height || height <= 0) height = (window.innerHeight * 0.75) - 80;
+                                            if (height < 400) height = 600;
+
+                                            // 2. Clear previous and create/get tooltip
+                                            d3.select('#treemap').selectAll('*').remove();
+                                            d3.select('#treemap')
+                                                .attr('width', width)
+                                                .attr('height', height)
+                                                .style('cursor', 'pointer');
+
+                                            // Virtual Lens Tooltip - create once
+                                            if (!treemapTooltip) {
+                                                treemapTooltip = d3.select('body').append('div')
+                                                    .attr('class', 'virtual-lens');
+                                            }
+                                            // System Map HUD - get once
+                                            if (!systemMapHud) {
+                                                systemMapHud = d3.select('#system-map-hud');
+                                            }
+
+
+                                            // Modern pastel color scale for risk
+                                            const getRiskColorPastel = (d) => {
+                                                const v = d.verdict;
+                                                // High risk - Soft Coral
+                                                if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#ff7675';
+                                                // Medium risk - Soft Amber
+                                                if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY' || v === 'FRAGILE_HUB') return '#fdcb6e';
+                                                // Special types
+                                                if (v === 'DATA_CLASS') return '#74b9ff';
+                                                if (v === 'CONFIGURATION') return '#a29bfe';
+                                                if (v === 'ORCHESTRATOR') return '#81ecec';
+                                                // OK - Mint Green
+                                                if (v === 'OK') return '#00b894';
+                                                // Fallback by score
+                                                const score = d.riskScore || 0;
+                                                if (score > 20) return '#ff7675';
+                                                if (score > 5) return '#fdcb6e';
+                                                return '#00b894';
+                                            };
+
+                                            // Verdict badge color for tooltip
+                                            const getVerdictBadgeStyle = (verdict) => {
+                                                const colors = {
+                                                    'TOTAL_MESS': { bg: '#ff7675', text: '#fff' },
+                                                    'SHOTGUN_SURGERY': { bg: '#e17055', text: '#fff' },
+                                                    'BRAIN_METHOD': { bg: '#a29bfe', text: '#fff' },
+                                                    'GOD_CLASS': { bg: '#636e72', text: '#fff' },
+                                                    'HIDDEN_DEPENDENCY': { bg: '#fdcb6e', text: '#2d3436' },
+                                                    'HIGH_COUPLING': { bg: '#ffeaa7', text: '#2d3436' },
+                                                    'COMPLEX': { bg: '#fab1a0', text: '#2d3436' },
+                                                    'SPLIT_CANDIDATE': { bg: '#d63031', text: '#fff' },
+                                                    'FRAGILE_HUB': { bg: '#e17055', text: '#fff' },
+                                                    'BLOATED': { bg: '#ff7675', text: '#fff' },
+                                                    'DATA_CLASS': { bg: '#74b9ff', text: '#fff' },
+                                                    'CONFIGURATION': { bg: '#a29bfe', text: '#fff' },
+                                                    'ORCHESTRATOR': { bg: '#81ecec', text: '#2d3436' },
+                                                    'OK': { bg: '#00b894', text: '#fff' }
+                                                };
+                                                return colors[verdict] || { bg: '#636e72', text: '#fff' };
+                                            };
+
+                                            try {
+                                                // 3. Data Check
+                                                if (!treemapData || !treemapData.children) {
+                                                    throw new Error("No hierarchical data available");
+                                                }
+
+                                                // 4. Setup Hierarchy
+                                                const root = d3.hierarchy(treemapData)
+                                                    .sum(d => d.value || 0)
+                                                    .sort((a, b) => b.value - a.value);
+
+                                                let focus = root;
+                                                let view;
+
+                                                // 5. Layout
+                                                const pack = d3.pack()
+                                                    .size([width, height])
+                                                    .padding(3);
+
+                                                pack(root);
+
+                                                // 6. Rendering
+                                                const svg = d3.select('#treemap');
+
+                                                // Background click handler
+                                                svg.on('click', (event) => zoom(event, root));
+
+                                                // Helper: Check if node is descendant of target
+                                                const isDescendantOf = (node, target) => {
+                                                    let current = node;
+                                                    while (current) {
+                                                        if (current === target) return true;
+                                                        current = current.parent;
+                                                    }
+                                                    return false;
+                                                };
+
+                                                // Circles
+                                                const node = svg.append('g')
+                                                    .selectAll('circle')
+                                                    .data(root.descendants())
+                                                    .join('circle')
+                                                    .attr('class', d => d.children ? 'node' : 'node node--leaf')
+                                                    .attr('fill', d => {
+                                                        if (d.children) return '#dfe6e9'; // Soft gray for packages
+                                                        try { return getRiskColorPastel(d.data); } catch(e) { return '#b2bec3'; }
+                                                    })
+                                                    .attr('stroke', d => d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                                    .attr('stroke-width', d => d.children ? 1 : 2)
+                                                    .style('opacity', 1)
+                                                    .on('mouseover', function(event, d) {
+                                                        // Hover glow effect
+                                                        const fillColor = d.children ? '#b2bec3' : getRiskColorPastel(d.data);
+                                                        d3.select(this)
+                                                            .attr('stroke', fillColor)
+                                                            .attr('stroke-width', 4)
+                                                            .style('filter', d.children ? 'none' : 'drop-shadow(0 0 10px ' + fillColor + ')');
+
+                                                        // Populate HUD (Fixed Hover Inspector)
+                                                        const hud = d3.select('#system-map-hud');
+                                                        const nodeData = d.data;
+                                                        const isLeaf = !d.children;
+                                                        const fullData = isLeaf ? rawData.find(r => r.label === nodeData.fullName || r.label === nodeData.name) : null;
+
+                                                        let hudHtml = `<h3>${nodeData.name}</h3>`;
+
+                                                        if (isLeaf && fullData) {
+                                                            const verdictStyle = getVerdictBadgeStyle(fullData.verdict);
+                                                            hudHtml += `
+                                                                <div class="hud-row"><span class="hud-label">Risk Score</span> <span class="hud-value">${fullData.riskScore.toFixed(1)}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Complexity</span> <span class="hud-value">${fullData.y.toFixed(0)}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Churn</span> <span class="hud-value">${fullData.churn}</span></div>
+                                                                <div class="hud-valign-center hud-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text}; text-align:center;">${fullData.verdict}</div>
+                                                            `;
+                                                        } else if (isLeaf) {
+                                                            hudHtml += `<div class="hud-row"><span class="hud-label">No analysis data available</span></div>`;
+                                                        } else {
+                                                            const childCount = d.descendants().filter(n => !n.children).length;
+                                                            hudHtml += `
+                                                                <div class="hud-row"><span class="hud-label">Items (Recursive)</span> <span class="hud-value">${childCount}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Direct Children</span> <span class="hud-value">${d.children.length}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Total Size</span> <span class="hud-value">${(d.value || 0).toLocaleString()}</span></div>
+                                                            `;
+                                                        }
+
+                                                        hud.html(hudHtml)
+                                                           .style('display', 'block')
+                                                           .style('opacity', 1);
+                                                    })
+                                                    .on('mouseout', function(d) {
+                                                        d3.select(this)
+                                                            .attr('stroke', d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                                            .attr('stroke-width', d.children ? 1 : 2)
+                                                            .style('filter', 'none');
+                                                        // Hide HUD on mouseout
+                                                        d3.select('#system-map-hud').style('opacity', 0);
+                                                    })
+                                                    .on('click', (event, d) => {
+                                                        event.stopPropagation();
+                                                        updateBreadcrumbs(d);
+                                                        zoom(event, d);
+
+                                                        // RESTORED: Show details panel for files
+                                                        if (!d.children) {
+                                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
+                                                            if (classData) showDetails(classData);
+                                                        }
+                                                    });
+
+                                                // Labels - show actual node name (filename for files, folder for packages)
+                                                const label = svg.append('g')
+                                                    .style('font', '10px sans-serif')
+                                                    .attr('pointer-events', 'none')
+                                                    .attr('text-anchor', 'middle')
+                                                    .selectAll('text')
+                                                    .data(root.descendants())
+                                                    .join('text')
+                                                    .style('fill-opacity', d => d.parent === root ? 1 : 0)
+                                                    .style('display', d => d.parent === root ? 'inline' : 'none')
+                                                    .style('font-weight', d => d.children ? 'bold' : 'normal')
+                                                    .style('fill', '#1a1a2e')
+                                                    .style('paint-order', 'stroke')
+                                                    .style('stroke', 'rgba(255,255,255,0.85)')
+                                                    .style('stroke-width', '2.5px')
+                                                    .text(d => {
+                                                        // Show the node's OWN name (filename for files, folder name for directories)
+                                                        const name = d.data.name;
+                                                        // Truncate long names to prevent overlap
+                                                        return name.length > 15 ? name.substring(0, 12) + '...' : name;
+                                                    });
+            """;
+    private static String TEMPLATE_BODY_PART2 = """
+                                    // Initial Zoom
+                                    zoomTo([root.x, root.y, root.r * 2]);
+
+                                    // --- Helper Functions ---
+
+                                    function zoom(event, d) {
+                                        focus = d;
+
+                                        // Cinematic smooth zoom with d3.interpolateZoom
+                                        // Use shorter duration for large datasets (performance optimization)
+                                        const nodeCount = root.descendants().length;
+                                        const duration = nodeCount > 500 ? 400 : 750;
+
+                                        const transition = svg.transition()
+                                            .duration(duration)
+                                            .tween('zoom', () => {
+                                                const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
+                                                return t => zoomTo(i(t));
+                                            });
+
+                                        // Fade effect for non-relevant siblings
+                                        node.transition(transition)
+                                            .style('opacity', n => {
+                                                // Always show root and current focus tree
+                                                if (n === root || isDescendantOf(n, focus) || isDescendantOf(focus, n)) return 1;
+                                                // Fade siblings
+                                                return 0.15;
+                                            });
+
+                                        // Label transitions
+                                        label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
+                                             .transition(transition)
+                                             .style('fill-opacity', d => d.parent === focus ? 1 : 0)
+                                             .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
+                                             .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
+
+                                        updateBreadcrumbs(d);
+                                    }
+
+                                    function zoomTo(v) {
+                                        const k = Math.min(width, height) / v[2];
+                                        view = v;
+                                        label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                        node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                        node.attr('r', d => d.r * k);
+
+                                        // Show labels on circles with visible radius > 20px (Fix 6)
+                                        label.each(function(d) {
+                                            const visibleR = d.r * k;
+                                            const isLeaf = !d.children;
+                                            const shouldShow = (d.parent === focus) || (isLeaf && visibleR > 20);
+                                            d3.select(this)
+                                                .style('display', shouldShow ? 'inline' : 'none')
+                                                .style('fill-opacity', shouldShow ? Math.min(1, (visibleR - 15) / 20) : 0)
+                                                .style('font-size', Math.max(10, Math.min(14, visibleR / 3)) + 'px');
+                                        });
+                                    }
+
+                                    function updateBreadcrumbs(n) {
+                                        const bc = d3.select('#breadcrumbs');
+                                        bc.selectAll('*').remove();
+                                        const path = [];
+                                        let curr = n;
+                                        while(curr) { path.unshift(curr); curr = curr.parent; }
+
+                                        path.forEach((node, i) => {
+                                            const isLast = i === path.length - 1;
+                                            const span = bc.append('span')
+                                                .text(node.data.name)
+                                                .attr('class', 'crumb')
+                                                .style('cursor', isLast ? 'default' : 'pointer');
+                                            if (!isLast) {
+                                                span.on('click', (e) => {
+                                                    e.stopPropagation();
+                                                    zoom(e, node);
+                                                });
+                                                bc.append('span').text('›').attr('class', 'crumb-separator');
+                                            }
+                                        });
+                                    }
+
+                                    // Init Breadcrumbs
+                                    updateBreadcrumbs(root);
+
+                                } catch (e) {
+                                    console.error("Render Error:", e);
+                                    d3.select('#treemap')
+                                        .append('text')
+                                        .attr('x', width / 2).attr('y', height / 2)
+                                        .attr('text-anchor', 'middle')
+                                        .attr('fill', '#ff7675')
+                                        .style('font-size', '18px')
+                                        .text('Error: ' + e.message);
+                                }
+                            }
+
+
+                        // Network rendering
+                        function renderNetwork() {
+                            const container = document.getElementById('network-container');
+                            const width = container.clientWidth || 800;
+                            const height = container.clientHeight || 600;
+
+                            d3.select('#network').selectAll('*').remove();
+
+                            const svg = d3.select('#network')
+                                .attr('width', width)
+                                .attr('height', height);
+
+                            if (!networkData.nodes || networkData.nodes.length === 0) {
+                                const msgGroup = svg.append('g')
+                                    .attr('transform', `translate(${width/2}, ${height/2})`);
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', -30)
+                                    .text('📊 No Temporal Coupling Detected')
+                                    .style('font-size', '18px')
+                                    .style('font-weight', 'bold')
+                                    .style('fill', '#666');
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', 5)
+                                    .text('Temporal coupling requires files that change together frequently.')
+                                    .style('font-size', '14px')
+                                    .style('fill', '#999');
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', 30)
+                                    .text('Try running with deeper git history: --min-churn 2')
+                                    .style('font-size', '13px')
+                                    .style('fill', '#aaa')
+                                    .style('font-style', 'italic');
+                                return;
+                            }
+
+                            // Add zoom behavior
+                const g = svg.append('g');
+                const zoomBehavior = d3.zoom()
+                    .extent([[0, 0], [width, height]])
+                    .scaleExtent([0.1, 4])
+                    .on('zoom', (event) => g.attr('transform', event.transform));
+
+                svg.call(zoomBehavior)
+                    .on('click', (event) => {
+                                    if (event.target.tagName !== 'circle') {
+                                        // Reset highlights on background click
+                                        node.style('opacity', 1);
+                                        link.style('opacity', 1);
+                                        nodeGroup.selectAll('text').style('opacity', 1);
+                                    }
+                                });
+
+                            const simulation = d3.forceSimulation(networkData.nodes)
+                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
+                                .force('charge', d3.forceManyBody().strength(-300))
+                                .force('center', d3.forceCenter(width / 2, height / 2))
+                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
+
+                            const link = g.append('g')
+                                .attr('class', 'links')
+                                .selectAll('line')
+                                .data(networkData.links)
+                                .join('line')
+                                .attr('class', 'link')
+                                .attr('stroke-width', d => Math.sqrt(d.value));
+
+                            // Add node groups to hold circle and text
+                            const nodeGroup = g.append('g')
+                                .attr('class', 'nodes')
+                                .selectAll('g')
+                                .data(networkData.nodes)
+                                .join('g')
+                                .call(d3.drag()
+                                    .on('start', dragstarted)
+                                    .on('drag', dragged)
+                                    .on('end', dragended))
+                                .on('end', () => {
+                                     // Delayed auto-zoom to ensure layout stabilization
+                                     setTimeout(() => {
+                                         const bounds = g.node().getBBox();
+                                         const fullWidth = width;
+                                         const fullHeight = height;
+                                         const midX = bounds.x + bounds.width / 2;
+                                         const midY = bounds.y + bounds.height / 2;
+                                         if (bounds.width > 0 && bounds.height > 0) {
+                                             const scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
+                                             const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+                                             svg.transition().duration(750).call(
+                                                 zoomBehavior.transform,
+                                                 d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                                             );
+                                         }
+                                     }, 500);
+                                });
+
+                // Add Zoom Controls
+                const controls = d3.select('#network-container').append('div')
+                    .style('position', 'absolute')
+                    .style('bottom', '20px')
+                    .style('right', '20px')
+                    .style('display', 'flex')
+                    .style('gap', '5px')
+                    .style('z-index', '1000');
+
+                const createButton = (text, onClick, title) => {
+                controls.append('button')
+                    .text(text)
+                    .attr('title', title)
+                    .style('width', '30px')
+                    .style('height', '30px')
+                    .style('border', 'none')
+                    .style('background', '#fff')
+                    .style('box-shadow', '0 2px 5px rgba(0,0,0,0.2)')
+                    .style('border-radius', '4px')
+                    .style('cursor', 'pointer')
+                    .style('font-weight', 'bold')
+                    .style('color', '#555')
+                    .on('mousedown', function() { d3.select(this).style('background', '#f0f0f0'); })
+                    .on('mouseup', function() { d3.select(this).style('background', '#fff'); })
+                    .on('click', onClick);
+            };
+
+            createButton('+', () => svg.transition().call(zoomBehavior.scaleBy, 1.3), 'Zoom In');
+            createButton('-', () => svg.transition().call(zoomBehavior.scaleBy, 0.7), 'Zoom Out');
+            createButton('⤢', () => {
+                 const bounds = g.node().getBBox();
+                 // Re-calculate dimensions to handle resizing/hidden tab initializations
+                 const container = document.getElementById('network-container');
+                 const fullWidth = container ? (container.clientWidth || width) : width;
+                 const fullHeight = container ? (container.clientHeight || height) : height;
+                 // Validate bounds
+                 if (!isFinite(bounds.width) || !isFinite(bounds.height) || bounds.width === 0 || bounds.height === 0) {
+                     console.warn("Invalid bounds for fit:", bounds);
+                     return;
+                 }
+
+                 const midX = bounds.x + bounds.width / 2;
+                 const midY = bounds.y + bounds.height / 2;
+
+                 // Clamp scale to prevent blowing up
+                 let scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
+                 scale = Math.max(0.1, Math.min(scale, 4)); // Clamp between 0.1x and 4x
+
+                 const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+
+                 if (!isFinite(translate[0]) || !isFinite(translate[1])) {
+                      console.warn("Invalid translate for fit:", translate);
+                      return;
+                 }
+
+                 svg.transition().duration(750).call(
+                     zoomBehavior.transform,
+                     d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                 );
+            }, 'Fit to Screen');
+
+                            // Network tooltip (Virtual Lens style)
+                             const networkTooltip = d3.select('body').append('div')
+                                .attr('class', 'treemap-tooltip')
+                                .style('opacity', 0)
+                                .style('z-index', '9999'); // Ensure tooltip is on top
+
+                            // Add nodes
+                            const node = nodeGroup.append('circle')
+                                .attr('class', 'node')
+                                .attr('r', d => Math.max(10, Math.sqrt(d.riskScore) * 4 + 8))
+                                .attr('fill', d => {
+                                    // Non-linear gradient for better contrast
+                                    // Using power 0.4 makes mid-range risks appear more colorful/intense
+                                    const baseColor = getRiskColor(d);
+                                    const maxRisk = Math.max(...networkData.nodes.map(n => n.riskScore)) || 100;
+                                    const ratio = d.riskScore / maxRisk;
+                                    const intensity = Math.pow(ratio, 0.4);
+                                    // Interpolate between a light pastel (0.1) and full rich color
+                                    return d3.interpolateRgb(d3.color(baseColor).brighter(1.5), baseColor)(0.2 + 0.8 * intensity);
+                                })
+                                .attr('stroke', '#fff')
+                                .attr('stroke-width', 2)
+                                .style('cursor', 'grab')
+                                .on('mouseover', function(event, d) {
+                                    d3.select(this).attr('stroke-width', 4).attr('stroke', '#667');
+                                    // Show tooltip with full path
+                                    const verdictStyle = getVerdictBadgeStyle(d.verdict);
+                                    networkTooltip
+                                        .html(`
+                                            <div class="lens-title">${d.id}</div>
+                                            <div class="lens-metrics">
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.riskScore.toFixed(1)}</span>
+                                                    <span class="lens-metric-label">Risk</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.coupled}</span>
+                                                    <span class="lens-metric-label">Coupled</span>
+                                                </div>
+                                            </div>
+            """;
+    private static String TEMPLATE_BODY_PART3 = """
                                     <div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${d.verdict}</div>
                                 `)
                                 .style('opacity', 1)
@@ -1463,4 +1522,9 @@ public class HtmlReporter {
             </body>
             </html>
             """;
+
+    private static final String TEMPLATE_BODY;
+    static {
+        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
+    }
 }
