@@ -213,23 +213,99 @@ public class HtmlReporter {
                     .chart-container { position: relative; height: 60vh; width: 100%; }
 
                     /* System Map (Circle Packing) */
-                    #treemap { width: 100%; height: 75vh; display: block; background: white; }
-                    .node { cursor: pointer; }
-                    .node:hover { stroke: #333; stroke-width: 2px; }
-                    /* .node--leaf removed to prevent color override */
+                    #treemap { width: 100%; height: 75vh; display: block; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 12px; }
+                    .node { cursor: pointer; transition: all 0.2s ease; }
+                    .node:hover { stroke-width: 3px !important; }
+                    .node--leaf { transition: all 0.2s ease; }
+                    .node--leaf:hover { filter: drop-shadow(0 0 8px currentColor) brightness(1.1); }
                     .label { font: 11px "Helvetica Neue", Helvetica, Arial, sans-serif; text-anchor: middle; text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff; pointer-events: none; fill: #2c3e50; font-weight: bold; }
                     .label, .node--root { pointer-events: none; }
-                    #breadcrumbs { font-size: 1.1rem; padding: 10px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; display: flex; align-items: center; }
-                    .crumb { cursor: pointer; color: #3498db; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
-                    .crumb:hover { background: #eaf2f8; text-decoration: none; }
-                    .crumb:last-child { color: #2c3e50; cursor: default; font-weight: bold; background: none; }
-                    .crumb-separator { color: #999; margin: 0 5px; }
+
+                    /* Wayfinding Breadcrumb Bar */
+                    #breadcrumbs {
+                        font-size: 0.95rem;
+                        padding: 10px 16px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        border-radius: 24px;
+                        margin-bottom: 12px;
+                        display: inline-flex;
+                        align-items: center;
+                        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                    }
+                    .crumb {
+                        cursor: pointer;
+                        color: rgba(255,255,255,0.85);
+                        padding: 4px 10px;
+                        border-radius: 12px;
+                        transition: all 0.2s ease;
+                        font-weight: 500;
+                    }
+                    .crumb:hover { background: rgba(255,255,255,0.2); color: #fff; }
+                    .crumb:last-child { color: #fff; cursor: default; font-weight: 700; background: rgba(255,255,255,0.15); }
+                    .crumb-separator { color: rgba(255,255,255,0.5); margin: 0 2px; font-size: 0.8rem; }
+
+                    /* Virtual Lens Tooltip */
+                    .virtual-lens {
+                        position: fixed;
+                        background: rgba(20, 20, 30, 0.92);
+                        backdrop-filter: blur(12px);
+                        -webkit-backdrop-filter: blur(12px);
+                        border: 1px solid rgba(255,255,255,0.1);
+                        border-radius: 12px;
+                        padding: 14px 18px;
+                        color: #fff;
+                        font-size: 13px;
+                        pointer-events: none;
+                        z-index: 1000;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05) inset;
+                        max-width: 300px;
+                        opacity: 0;
+                        transition: opacity 0.15s ease;
+                    }
+                    .virtual-lens .lens-title {
+                        font-size: 14px;
+                        font-weight: 700;
+                        margin-bottom: 10px;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid rgba(255,255,255,0.1);
+                        word-break: break-word;
+                    }
+                    .virtual-lens .lens-metrics {
+                        display: grid;
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 8px;
+                        margin-bottom: 10px;
+                    }
+                    .virtual-lens .lens-metric {
+                        text-align: center;
+                        background: rgba(255,255,255,0.05);
+                        padding: 6px 4px;
+                        border-radius: 6px;
+                    }
+                    .virtual-lens .lens-metric-value {
+                        font-size: 16px;
+                        font-weight: 700;
+                        display: block;
+                    }
+                    .virtual-lens .lens-metric-label {
+                        font-size: 10px;
+                        color: rgba(255,255,255,0.6);
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    .virtual-lens .lens-verdict {
+                        display: inline-block;
+                        padding: 4px 10px;
+                        border-radius: 6px;
+                        font-size: 11px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
 
                     /* Network Graph */
                     #network-container { width: 100%; height: 60vh; overflow: auto; position: relative; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
                     #network { display: block; }
-                    .node { cursor: pointer; stroke: #fff; stroke-width: 2px; }
-                    .node:hover { stroke: #000; stroke-width: 3px; }
                     .link { stroke: #999; stroke-opacity: 0.6; stroke-width: 1px; }
 
                     /* DataTable */
@@ -258,21 +334,21 @@ public class HtmlReporter {
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
 
-                    /* Verdict Colors */
-                    .verdict-TOTAL_MESS { background-color: #c0392b; }
-                    .verdict-SHOTGUN_SURGERY { background-color: #d35400; }
-                    .verdict-BRAIN_METHOD { background-color: #8e44ad; }
-                    .verdict-GOD_CLASS { background-color: #2c3e50; }
-                    .verdict-HIDDEN_DEPENDENCY { background-color: #e67e22; }
-                    .verdict-HIGH_COUPLING { background-color: #f39c12; }
-                    .verdict-COMPLEX { background-color: #f1c40f; color: #333; }
-                    .verdict-SPLIT_CANDIDATE { background-color: #9b59b6; }
-                    .verdict-FRAGILE_HUB { background-color: #e67e22; }
-                    .verdict-BLOATED { background-color: #e74c3c; }
-                    .verdict-DATA_CLASS { background-color: #3498db; }
-                    .verdict-CONFIGURATION { background-color: #6c5ce7; }
-                    .verdict-ORCHESTRATOR { background-color: #1abc9c; }
-                    .verdict-OK { background-color: #27ae60; }
+                    /* Verdict Colors - Modern Pastel Palette */
+                    .verdict-TOTAL_MESS { background-color: #ff7675; }
+                    .verdict-SHOTGUN_SURGERY { background-color: #e17055; }
+                    .verdict-BRAIN_METHOD { background-color: #a29bfe; }
+                    .verdict-GOD_CLASS { background-color: #636e72; }
+                    .verdict-HIDDEN_DEPENDENCY { background-color: #fdcb6e; color: #2d3436; }
+                    .verdict-HIGH_COUPLING { background-color: #ffeaa7; color: #2d3436; }
+                    .verdict-COMPLEX { background-color: #fab1a0; color: #2d3436; }
+                    .verdict-SPLIT_CANDIDATE { background-color: #d63031; }
+                    .verdict-FRAGILE_HUB { background-color: #e17055; }
+                    .verdict-BLOATED { background-color: #ff7675; }
+                    .verdict-DATA_CLASS { background-color: #74b9ff; }
+                    .verdict-CONFIGURATION { background-color: #a29bfe; }
+                    .verdict-ORCHESTRATOR { background-color: #81ecec; color: #2d3436; }
+                    .verdict-OK { background-color: #00b894; }
 
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                     .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
@@ -576,7 +652,25 @@ public class HtmlReporter {
                     document.getElementById('classFilter').addEventListener('input', renderTable);
                     document.getElementById('verdictFilter').addEventListener('change', renderTable);
 
-                    // System Map (Circle Packing) rendering
+                    // System Map (Circle Packing) rendering - System Map 2.0
+                    let treemapTooltip = null;
+                    let resizeTimeout = null;
+
+                    // Debounce helper
+                    function debounce(fn, delay) {
+                        return function(...args) {
+                            clearTimeout(resizeTimeout);
+                            resizeTimeout = setTimeout(() => fn.apply(this, args), delay);
+                        };
+                    }
+
+                    // Responsive resize handler
+                    window.addEventListener('resize', debounce(() => {
+                        if (document.getElementById('treemap-tab').classList.contains('active')) {
+                            renderTreemap();
+                        }
+                    }, 250));
+
                     function renderTreemap() {
                         // 1. Validate Container & Dimensions
                         const container = document.getElementById('treemap-tab');
@@ -587,19 +681,66 @@ public class HtmlReporter {
                         }
 
                         let width = svgEl.clientWidth;
-                        let height = container.clientHeight - 40;
+                        let height = container.clientHeight - 80;
 
                         // Robust fallback for hidden/unmounted state
                         if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
-                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 40;
-                        if (height < 400) height = 600; // Minimum sensible height
+                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 80;
+                        if (height < 400) height = 600;
 
-                        // 2. Clear previous
+                        // 2. Clear previous and create/get tooltip
                         d3.select('#treemap').selectAll('*').remove();
                         d3.select('#treemap')
                             .attr('width', width)
                             .attr('height', height)
                             .style('cursor', 'pointer');
+
+                        // Virtual Lens Tooltip - create once
+                        if (!treemapTooltip) {
+                            treemapTooltip = d3.select('body').append('div')
+                                .attr('class', 'virtual-lens');
+                        }
+
+                        // Modern pastel color scale for risk
+                        const getRiskColorPastel = (d) => {
+                            const v = d.verdict;
+                            // High risk - Soft Coral
+                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#ff7675';
+                            // Medium risk - Soft Amber
+                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY' || v === 'FRAGILE_HUB') return '#fdcb6e';
+                            // Special types
+                            if (v === 'DATA_CLASS') return '#74b9ff';
+                            if (v === 'CONFIGURATION') return '#a29bfe';
+                            if (v === 'ORCHESTRATOR') return '#81ecec';
+                            // OK - Mint Green
+                            if (v === 'OK') return '#00b894';
+                            // Fallback by score
+                            const score = d.riskScore || 0;
+                            if (score > 20) return '#ff7675';
+                            if (score > 5) return '#fdcb6e';
+                            return '#00b894';
+                        };
+
+                        // Verdict badge color for tooltip
+                        const getVerdictBadgeStyle = (verdict) => {
+                            const colors = {
+                                'TOTAL_MESS': { bg: '#ff7675', text: '#fff' },
+                                'SHOTGUN_SURGERY': { bg: '#e17055', text: '#fff' },
+                                'BRAIN_METHOD': { bg: '#a29bfe', text: '#fff' },
+                                'GOD_CLASS': { bg: '#636e72', text: '#fff' },
+                                'HIDDEN_DEPENDENCY': { bg: '#fdcb6e', text: '#2d3436' },
+                                'HIGH_COUPLING': { bg: '#ffeaa7', text: '#2d3436' },
+                                'COMPLEX': { bg: '#fab1a0', text: '#2d3436' },
+                                'SPLIT_CANDIDATE': { bg: '#d63031', text: '#fff' },
+                                'FRAGILE_HUB': { bg: '#e17055', text: '#fff' },
+                                'BLOATED': { bg: '#ff7675', text: '#fff' },
+                                'DATA_CLASS': { bg: '#74b9ff', text: '#fff' },
+                                'CONFIGURATION': { bg: '#a29bfe', text: '#fff' },
+                                'ORCHESTRATOR': { bg: '#81ecec', text: '#2d3436' },
+                                'OK': { bg: '#00b894', text: '#fff' }
+                            };
+                            return colors[verdict] || { bg: '#636e72', text: '#fff' };
+                        };
 
                         try {
                             // 3. Data Check
@@ -618,7 +759,7 @@ public class HtmlReporter {
                             // 5. Layout
                             const pack = d3.pack()
                                 .size([width, height])
-                                .padding(2);
+                                .padding(3);
 
                             pack(root);
 
@@ -628,6 +769,16 @@ public class HtmlReporter {
                             // Background click handler
                             svg.on('click', (event) => zoom(event, root));
 
+                            // Helper: Check if node is descendant of target
+                            const isDescendantOf = (node, target) => {
+                                let current = node;
+                                while (current) {
+                                    if (current === target) return true;
+                                    current = current.parent;
+                                }
+                                return false;
+                            };
+
                             // Circles
                             const node = svg.append('g')
                                 .selectAll('circle')
@@ -635,12 +786,108 @@ public class HtmlReporter {
                                 .join('circle')
                                 .attr('class', d => d.children ? 'node' : 'node node--leaf')
                                 .attr('fill', d => {
-                                    if (d.children) return '#ecf0f1';
-                                    try { return getRiskColor(d.data); } catch(e) { return '#bdc3c7'; }
+                                    if (d.children) return '#dfe6e9'; // Soft gray for packages
+                                    try { return getRiskColorPastel(d.data); } catch(e) { return '#b2bec3'; }
                                 })
-                                .attr('stroke', d => d.children ? '#bdc3c7' : '#fff')
-                                .on('mouseover', function(event, d) { d3.select(this).attr('stroke', '#2c3e50'); })
-                                .on('mouseout', function(event, d) { d3.select(this).attr('stroke', d.children ? '#bdc3c7' : '#fff'); })
+                                .attr('stroke', d => d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                .attr('stroke-width', d => d.children ? 1 : 2)
+                                .style('opacity', 1)
+                                .on('mouseover', function(event, d) {
+                                    // Hover glow effect
+                                    const fillColor = d.children ? '#b2bec3' : getRiskColorPastel(d.data);
+                                    d3.select(this)
+                                        .attr('stroke', fillColor)
+                                        .attr('stroke-width', 4)
+                                        .style('filter', d.children ? 'none' : 'drop-shadow(0 0 10px ' + fillColor + ')');
+
+                                    // Show Virtual Lens Tooltip
+                                    const nodeData = d.data;
+                                    const isLeaf = !d.children;
+                                    const fullData = isLeaf ? rawData.find(r => r.label === nodeData.fullName || r.label === nodeData.name) : null;
+
+                                    let tooltipHtml = `<div class="lens-title">${nodeData.name}</div>`;
+
+                                    if (isLeaf && fullData) {
+                                        const verdictStyle = getVerdictBadgeStyle(fullData.verdict);
+                                        tooltipHtml += `
+                                            <div class="lens-metrics">
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${fullData.churn}</span>
+                                                    <span class="lens-metric-label">Churn</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${fullData.y.toFixed(0)}</span>
+                                                    <span class="lens-metric-label">Complexity</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${fullData.riskScore.toFixed(1)}</span>
+                                                    <span class="lens-metric-label">Risk</span>
+                                                </div>
+                                            </div>
+                                            <div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${fullData.verdict}</div>
+                                        `;
+                                    } else if (isLeaf) {
+                                        tooltipHtml += `
+                                            <div class="lens-metrics">
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${(nodeData.churn || 0)}</span>
+                                                    <span class="lens-metric-label">Churn</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${(nodeData.complexity || 0).toFixed(0)}</span>
+                                                    <span class="lens-metric-label">Complexity</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${(nodeData.riskScore || 0).toFixed(1)}</span>
+                                                    <span class="lens-metric-label">Risk</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                        if (nodeData.verdict) {
+                                            const verdictStyle = getVerdictBadgeStyle(nodeData.verdict);
+                                            tooltipHtml += `<div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${nodeData.verdict}</div>`;
+                                        }
+                                    } else {
+                                        // Package tooltip - show children count and total LOC
+                                        const childCount = d.descendants().filter(n => !n.children).length;
+                                        tooltipHtml += `
+                                            <div class="lens-metrics">
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${childCount}</span>
+                                                    <span class="lens-metric-label">Files</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.value.toLocaleString()}</span>
+                                                    <span class="lens-metric-label">Total LOC</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.children.length}</span>
+                                                    <span class="lens-metric-label">Children</span>
+                                                </div>
+                                            </div>
+                                            <div style="font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 4px;">📁 Click to explore</div>
+                                        `;
+                                    }
+
+                                    treemapTooltip
+                                        .html(tooltipHtml)
+                                        .style('opacity', 1)
+                                        .style('left', (event.pageX + 15) + 'px')
+                                        .style('top', (event.pageY - 10) + 'px');
+                                })
+                                .on('mousemove', function(event) {
+                                    treemapTooltip
+                                        .style('left', (event.pageX + 15) + 'px')
+                                        .style('top', (event.pageY - 10) + 'px');
+                                })
+                                .on('mouseout', function(event, d) {
+                                    d3.select(this)
+                                        .attr('stroke', d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                        .attr('stroke-width', d.children ? 1 : 2)
+                                        .style('filter', 'none');
+
+                                    treemapTooltip.style('opacity', 0);
+                                })
                                 .on('click', (event, d) => {
                                     const isLeaf = !d.children || d.height === 0;
                                     const isCmdClick = event.metaKey || event.ctrlKey;
@@ -648,7 +895,6 @@ public class HtmlReporter {
                                     if (isLeaf || isCmdClick) {
                                         event.stopPropagation();
 
-                                        // 1. If it's a leaf, ALWAYS show details (Click or Cmd+Click)
                                         if (isLeaf) {
                                             const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
                                             if (classData) {
@@ -656,12 +902,9 @@ public class HtmlReporter {
                                             } else {
                                                 console.warn("Details not found for " + d.data.name);
                                             }
+                                        } else if (isCmdClick) {
+                                            console.log("Folder selected: " + d.data.name);
                                         }
-                                        // 2. If it's a folder AND Cmd+Click, show logic (or ignore)
-                                        else if (isCmdClick) {
-                                            console.log("Folder selected: " + d.data.name + " (No details available)");
-                                        }
-
                                         return;
                                     }
 
@@ -670,10 +913,6 @@ public class HtmlReporter {
                                         event.stopPropagation();
                                     }
                                 });
-
-                            // Tooltips
-                            node.append('title')
-                                .text(d => `${d.data.name}\nLOC: ${d.value}\nRisk: ${(d.data.riskScore || 0).toFixed(1)}`);
 
                             // Labels
                             const label = svg.append('g')
@@ -687,6 +926,7 @@ public class HtmlReporter {
                                 .style('display', d => d.parent === root ? 'inline' : 'none')
                                 .style('font-weight', d => d.children ? 'bold' : 'normal')
                                 .style('fill', '#2c3e50')
+                                .style('text-shadow', '0 1px 2px rgba(255,255,255,0.8)')
                                 .text(d => d.data.name);
 
                             // Initial Zoom
@@ -696,12 +936,25 @@ public class HtmlReporter {
 
                             function zoom(event, d) {
                                 focus = d;
-                                const transition = svg.transition().duration(750)
-                                    .tween('zoom', d => {
+
+                                // Cinematic smooth zoom with d3.interpolateZoom
+                                const transition = svg.transition()
+                                    .duration(750)
+                                    .tween('zoom', () => {
                                         const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
                                         return t => zoomTo(i(t));
                                     });
 
+                                // Fade effect for non-relevant siblings
+                                node.transition(transition)
+                                    .style('opacity', n => {
+                                        // Always show root and current focus tree
+                                        if (n === root || isDescendantOf(n, focus) || isDescendantOf(focus, n)) return 1;
+                                        // Fade siblings
+                                        return 0.15;
+                                    });
+
+                                // Label transitions
                                 label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
                                      .transition(transition)
                                      .style('fill-opacity', d => d.parent === focus ? 1 : 0)
@@ -733,11 +986,15 @@ public class HtmlReporter {
                                         .attr('class', 'crumb')
                                         .style('cursor', isLast ? 'default' : 'pointer');
                                     if (!isLast) {
-                                        span.on('click', (e) => zoom(e, node));
-                                        bc.append('span').text(' > ').attr('class', 'crumb-separator');
+                                        span.on('click', (e) => {
+                                            e.stopPropagation();
+                                            zoom(e, node);
+                                        });
+                                        bc.append('span').text('›').attr('class', 'crumb-separator');
                                     }
                                 });
                             }
+
                             // Init Breadcrumbs
                             updateBreadcrumbs(root);
 
@@ -747,8 +1004,8 @@ public class HtmlReporter {
                                 .append('text')
                                 .attr('x', width / 2).attr('y', height / 2)
                                 .attr('text-anchor', 'middle')
-                                .attr('fill', 'red')
-                                .style('font-size', '20px')
+                                .attr('fill', '#ff7675')
+                                .style('font-size', '18px')
                                 .text('Error: ' + e.message);
                         }
                     }
