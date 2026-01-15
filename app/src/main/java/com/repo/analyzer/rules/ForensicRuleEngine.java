@@ -42,13 +42,21 @@ public class ForensicRuleEngine {
             int recentChurn,
             int coupledPeers,
             AnalyzerConfig config,
-            SocialForensics social) {
+            SocialForensics social,
+            boolean isUntestedHotspot) {
 
-        // Convenience constructor without social data (backward compatibility)
+        // Convenience constructor without social/testability (backward compatibility)
         public EvaluationContext(
                 FileMetrics metrics, int churn, int recentChurn,
                 int coupledPeers, AnalyzerConfig config) {
-            this(metrics, churn, recentChurn, coupledPeers, config, SocialForensics.empty());
+            this(metrics, churn, recentChurn, coupledPeers, config, SocialForensics.empty(), false);
+        }
+
+        // Constructor for compatibility with old tests causing lint errors
+        public EvaluationContext(
+                FileMetrics metrics, int churn, int recentChurn,
+                int coupledPeers, AnalyzerConfig config, SocialForensics social) {
+            this(metrics, churn, recentChurn, coupledPeers, config, social, false);
         }
 
         public double totalCC() {
@@ -169,10 +177,17 @@ public class ForensicRuleEngine {
                 ctx -> ctx.coupledPeers() > 10,
                 "Changes to this file require editing >10 other files"));
 
-        // Priority 2: Hidden Dependency
+        // Priority 2: Untested Hotspot (Testability risk)
+        defaultRules.add(new VerdictRule(
+                "UNTESTED_HOTSPOT",
+                2,
+                ctx -> ctx.isUntestedHotspot,
+                "High risk, high churn, and NO tests"));
+
+        // Priority 3: Hidden Dependency
         defaultRules.add(new VerdictRule(
                 "HIDDEN_DEPENDENCY",
-                2,
+                3,
                 ctx -> ctx.coupledPeers() > 3 && ctx.fanOut() < 5,
                 "High temporal coupling but low static imports"));
 

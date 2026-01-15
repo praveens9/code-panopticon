@@ -4,7 +4,7 @@ import com.repo.analyzer.git.SocialForensics;
 
 /**
  * Complete analysis data for a single file.
- * Combines structural, evolutionary, and social metrics.
+ * Combines structural, evolutionary, social, and testability metrics.
  */
 public record AnalysisData(
                 // Identification
@@ -43,12 +43,19 @@ public record AnalysisData(
                 double primaryAuthorPercentage,
                 int busFactor,
                 boolean isKnowledgeIsland,
-                java.util.List<SocialForensics.AuthorContribution> topContributors) {
+                java.util.List<SocialForensics.AuthorContribution> topContributors,
+
+                // Testability (v3.0 Phase 2)
+                boolean hasTestFile,
+                String testFilePath,
+                int testabilityScore,
+                boolean isUntestedHotspot) {
 
         /**
-         * Create AnalysisData with empty social forensics (for backward compatibility).
+         * Create AnalysisData with empty social forensics and testability (for backward
+         * compatibility).
          */
-        public static AnalysisData withoutSocial(
+        public static AnalysisData withoutSocialAndTestability(
                         String className, int churn, int recentChurn, int coupledPeers, int daysSinceLastCommit,
                         double methodCount, double avgFields, double lcom4,
                         double totalCC, double maxCC, double fanOut,
@@ -62,6 +69,32 @@ public record AnalysisData(
                                 methodCount, avgFields, lcom4, totalCC, maxCC, fanOut,
                                 afferentCoupling, instability, loc, riskScore, verdict, isDataClass,
                                 brainMethods, lcom4Blocks, coupledClassNames,
-                                0, "unknown", 0, 0, false, java.util.List.of());
+                                0, "unknown", 0, 0, false, java.util.List.of(),
+                                false, "", 0, false);
+        }
+
+        /**
+         * Create AnalysisData without testability data (for backward compatibility).
+         */
+        public static AnalysisData withoutTestability(
+                        String className, int churn, int recentChurn, int coupledPeers, int daysSinceLastCommit,
+                        double methodCount, double avgFields, double lcom4,
+                        double totalCC, double maxCC, double fanOut,
+                        double afferentCoupling, double instability, double loc,
+                        double riskScore, String verdict, boolean isDataClass,
+                        java.util.List<String> brainMethods,
+                        java.util.List<java.util.Set<String>> lcom4Blocks,
+                        java.util.Set<String> coupledClassNames,
+                        int authorCount, String primaryAuthor, double primaryAuthorPercentage,
+                        int busFactor, boolean isKnowledgeIsland,
+                        java.util.List<SocialForensics.AuthorContribution> topContributors) {
+                return new AnalysisData(
+                                className, churn, recentChurn, coupledPeers, daysSinceLastCommit,
+                                methodCount, avgFields, lcom4, totalCC, maxCC, fanOut,
+                                afferentCoupling, instability, loc, riskScore, verdict, isDataClass,
+                                brainMethods, lcom4Blocks, coupledClassNames,
+                                authorCount, primaryAuthor, primaryAuthorPercentage, busFactor, isKnowledgeIsland,
+                                topContributors,
+                                false, "", 0, false);
         }
 }

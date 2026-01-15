@@ -24,7 +24,8 @@ public class JsonDataConverter {
                         "verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, " +
                         "recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, " +
                         "loc: %.0f, riskScore: %.2f, daysSinceLastCommit: %d, authorCount: %d, " +
-                        "primaryAuthor: '%s', primaryAuthorPercentage: %.1f, busFactor: %d, isKnowledgeIsland: %b }",
+                        "primaryAuthor: '%s', primaryAuthorPercentage: %.1f, busFactor: %d, isKnowledgeIsland: %b, " +
+                        "hasTestFile: %b, testFilePath: '%s', testabilityScore: %d, isUntestedHotspot: %b }",
                 d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, escapeJs(d.className()),
                 d.avgFields(), d.maxCC(), d.coupledPeers(), d.verdict(), d.isDataClass(),
                 formatBrainMethods(d.brainMethods()),
@@ -33,7 +34,8 @@ public class JsonDataConverter {
                 d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore(),
                 d.daysSinceLastCommit(), d.authorCount(),
                 escapeJs(d.primaryAuthor()),
-                d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland());
+                d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland(),
+                d.hasTestFile(), escapeJs(d.testFilePath()), d.testabilityScore(), d.isUntestedHotspot());
     }
 
     private String formatBrainMethods(List<String> methods) {

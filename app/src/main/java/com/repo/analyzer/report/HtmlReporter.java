@@ -192,6 +192,7 @@ public class HtmlReporter {
 
                     /* Verdict Colors - Modern Pastel Palette */
                     .verdict-KNOWLEDGE_ISLAND { background: linear-gradient(135deg, #e74c3c 0%, #9b59b6 100%); }
+                    .verdict-UNTESTED_HOTSPOT { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); }
                     .verdict-TOTAL_MESS { background-color: #ff7675; }
                     .verdict-SHOTGUN_SURGERY { background-color: #e17055; }
                     .verdict-BRAIN_METHOD { background-color: #a29bfe; }
@@ -1425,6 +1426,44 @@ public class HtmlReporter {
                             `;
                         }
 
+                        // Testability section
+                        let testabilitySection = '';
+                        if (d.hasTestFile !== undefined) {
+                            const hasTest = d.hasTestFile;
+                            const score = d.testabilityScore || 0;
+                            const isUntestedHotspot = d.isUntestedHotspot || d.verdict === 'UNTESTED_HOTSPOT';
+
+                            // Warning for untested hotspot
+                            let hotspotWarning = '';
+                            if (isUntestedHotspot) {
+                                hotspotWarning = `
+                                    <div style="margin-top: 10px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; border-radius: 4px; padding: 8px; font-size: 0.8rem; color: #c0392b;">
+                                        <strong>⚠️ Danger Zone:</strong> High risk + Frequent changes + No tests.<br/>Safety net needed before refactoring.
+                                    </div>
+                                `;
+                            }
+
+                            testabilitySection = `
+                                <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                        <span>🧪</span> Testability X-Ray
+                                    </h3>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <div style="text-align: center; flex: 1;">
+                                            <div style="font-size: 1.5rem; font-weight: bold;">${hasTest ? '✅' : '❌'}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.9; text-transform: uppercase;">Has Test</div>
+                                        </div>
+                                        <div style="text-align: center; flex: 1;">
+                                            <div style="font-size: 1.5rem; font-weight: bold;">${score}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.9; text-transform: uppercase;">Score</div>
+                                        </div>
+                                    </div>
+                                    ${hotspotWarning}
+                                    ${d.testFilePath ? `<div style="font-size: 0.7rem; text-align: center; margin-top: 8px; opacity: 0.9; word-break: break-all;"><code>${d.testFilePath}</code></div>` : ''}
+                                </div>
+                            `;
+                        }
+
                         content.innerHTML = `
                             <div class="panel-header">
                                 <h2>${d.label}</h2>
@@ -1432,6 +1471,7 @@ public class HtmlReporter {
                             </div>
 
                             ${socialSection}
+                            ${testabilitySection}
                             ${islandWarning}
 
                             <!-- Action Plan Section -->

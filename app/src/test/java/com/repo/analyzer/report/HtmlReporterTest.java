@@ -23,7 +23,8 @@ class HtmlReporterTest {
                 "OK", false, // verdict, isDataClass
                 Collections.emptyList(), Collections.emptyList(), Collections.emptySet(), // brainMethods, lcom4Blocks,
                                                                                           // coupledClassNames
-                2, "test@example.com", 60.0, 2, false, Collections.emptyList()); // social forensics
+                2, "test@example.com", 60.0, 2, false, Collections.emptyList(), // social forensics
+                true, "test_utils.py", 80, false); // testability
 
         String json = reporter.convertToJson(List.of(data));
 
@@ -44,7 +45,8 @@ class HtmlReporterTest {
                 100.0, 5.0,
                 "OK", false,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptySet(),
-                3, "dev@example.com", 45.0, 2, false, Collections.emptyList());
+                3, "dev@example.com", 45.0, 2, false, Collections.emptyList(),
+                true, "server_test.go", 75, false);
         AnalysisData data2 = new AnalysisData(
                 "README.md",
                 1, 0, 0, 100,
@@ -54,7 +56,8 @@ class HtmlReporterTest {
                 10.0, 0.0,
                 "OK", false,
                 Collections.emptyList(), Collections.emptyList(), Collections.emptySet(),
-                1, "author@example.com", 100.0, 1, false, Collections.emptyList());
+                1, "author@example.com", 100.0, 1, false, Collections.emptyList(),
+                false, "", 20, false);
 
         String json = reporter.convertToHierarchyJson(List.of(data1, data2));
 

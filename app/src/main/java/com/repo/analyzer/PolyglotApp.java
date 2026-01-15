@@ -9,6 +9,7 @@ import com.repo.analyzer.report.AnalysisData;
 import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
+import com.repo.analyzer.testability.TestabilityAnalyzer;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -216,6 +217,7 @@ public class PolyglotApp {
         // Phase 2: Structural Analysis
         System.out.println("\n>>> PHASE 2: ANALYZING STRUCTURE <<<");
         ForensicRuleEngine ruleEngine = new ForensicRuleEngine();
+        TestabilityAnalyzer testabilityAnalyzer = new TestabilityAnalyzer(repoPath);
         List<AnalysisData> reportData = new ArrayList<>();
 
         // Print header
@@ -269,6 +271,15 @@ public class PolyglotApp {
 
             // Convert to AnalysisData for reporting
             String className = extractClassName(relativePath);
+            // Testability analysis
+            boolean hasTestFile = testabilityAnalyzer.hasTest(relativePath);
+            String testFilePath = testabilityAnalyzer.findTestFile(relativePath)
+                    .map(Path::toString).orElse("");
+            int testabilityScore = testabilityAnalyzer.calculateTestabilityScore(
+                    relativePath, metrics.fanOut(), lcom4, metrics.totalComplexity(), hasTestFile);
+            boolean isUntestedHotspot = testabilityAnalyzer.isUntestedHotspot(
+                    hasTestFile, riskScore, churn);
+
             reportData.add(new AnalysisData(
                     className,
                     churn,
@@ -297,7 +308,11 @@ public class PolyglotApp {
                     social.primaryAuthorPercentage(),
                     social.busFactor(),
                     social.isKnowledgeIsland(),
-                    social.topContributors()));
+                    social.topContributors(),
+                    hasTestFile,
+                    testFilePath,
+                    testabilityScore,
+                    isUntestedHotspot));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(
