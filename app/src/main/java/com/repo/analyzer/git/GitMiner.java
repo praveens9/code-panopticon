@@ -85,7 +85,7 @@ public class GitMiner {
                         currentTimestamp = Long.parseLong(line.substring(12).trim());
                     } else if (line.startsWith("\t") && currentAuthor != null) {
                         // This is a code line - count it for the author
-                        authorLineCounts.merge(currentAuthor, 1, Integer::sum);
+                        authorLineCounts.merge(currentAuthor, 1, (a, b) -> a + b);
 
                         // Track latest commit per author
                         Long existing = authorLastCommit.get(currentAuthor);
