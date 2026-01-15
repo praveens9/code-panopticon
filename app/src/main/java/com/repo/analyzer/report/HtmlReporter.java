@@ -29,7 +29,7 @@ public class HtmlReporter {
     String convertToJson(List<AnalysisData> data) {
         return data.stream()
                 .map(d -> String.format(
-                        "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f }",
+                        "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f, daysSinceLastCommit: %d, authorCount: %d, primaryAuthor: '%s', primaryAuthorPercentage: %.1f, busFactor: %d, isKnowledgeIsland: %b }",
                         d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, d.className(), d.avgFields(), d.maxCC(),
                         d.coupledPeers(), d.verdict(), d.isDataClass(),
                         d.brainMethods().stream().map(s -> "'" + s + "'").collect(Collectors.joining(", ")),
@@ -38,7 +38,10 @@ public class HtmlReporter {
                                         .collect(Collectors.joining(", ", "[", "]")))
                                 .collect(Collectors.joining(", ", "[", "]")),
                         d.churn(), d.recentChurn(), d.lcom4(),
-                        d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore()))
+                        d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore(),
+                        d.daysSinceLastCommit(), d.authorCount(),
+                        d.primaryAuthor().replace("'", "\\'"), // Escape quotes in author email
+                        d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland()))
                 .collect(Collectors.joining(", ", "[", "]"));
     }
 
@@ -312,7 +315,7 @@ public class HtmlReporter {
                     /* DataTable - Scrollable with Sticky Header */
                     #table-tab { max-height: 70vh; overflow-y: auto; }
                     table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
-                    th { resize: horizontal; overflow: auto; min-width: 80px; }
+                    th { resize: horizontal; overflow: hidden; min-width: 80px; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
                     th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
                     th:hover { background: #2c3e50; }
@@ -340,6 +343,7 @@ public class HtmlReporter {
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
 
                     /* Verdict Colors - Modern Pastel Palette */
+                    .verdict-KNOWLEDGE_ISLAND { background: linear-gradient(135deg, #e74c3c 0%, #9b59b6 100%); }
                     .verdict-TOTAL_MESS { background-color: #ff7675; }
                     .verdict-SHOTGUN_SURGERY { background-color: #e17055; }
                     .verdict-BRAIN_METHOD { background-color: #a29bfe; }
@@ -354,6 +358,7 @@ public class HtmlReporter {
                     .verdict-CONFIGURATION { background-color: #a29bfe; }
                     .verdict-ORCHESTRATOR { background-color: #81ecec; color: #2d3436; }
                     .verdict-OK { background-color: #00b894; }
+
 
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                     .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
@@ -411,7 +416,7 @@ public class HtmlReporter {
                                                     <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
                                                     <button class="tab" onclick="switchTab('table')">Data Table</button>
                                                     <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                                    <button class="tab" onclick="switchTab('network')">Network</button>
+                                                    <button class="tab" onclick="switchTab('network')">Coupling Graph</button>
                                                 </div>
 
                                                 <!-- Quadrant Tab -->
@@ -628,11 +633,55 @@ public class HtmlReporter {
                                             const panel = document.getElementById('detailsPanel');
                                             panel.classList.add('active');
                                             const content = document.getElementById('panelContent');
+
+                                            // Social forensics section (only if we have data)
+                                            let socialSection = '';
+                                            if (d.authorCount && d.authorCount > 0) {
+                                                const busFactor = d.busFactor || 1;
+                                                const busFactorEmoji = busFactor === 1 ? '🚨' : (busFactor <= 2 ? '⚠️' : '✅');
+                                                const busFactorColor = busFactor === 1 ? '#e74c3c' : (busFactor <= 2 ? '#f39c12' : '#27ae60');
+
+                                                // Calculate bar width for primary author
+                                                const primaryPct = d.primaryAuthorPercentage || 0;
+
+                                                socialSection = `
+                                                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                                        <h3 style="margin: 0 0 12px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                                                            <span style="font-size: 1.2rem;">👥</span> Social Forensics
+                                                        </h3>
+
+                                                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${busFactorEmoji} ${busFactor}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">BUS FACTOR</div>
+                                                            </div>
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${d.authorCount}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">AUTHORS</div>
+                                                            </div>
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${d.daysSinceLastCommit >= 0 ? d.daysSinceLastCommit + 'd' : '?'}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">LAST COMMIT</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-top: 10px;">
+                                                            <div style="font-size: 0.75rem; margin-bottom: 5px; opacity: 0.9;">Primary Author: <strong>${d.primaryAuthor || 'unknown'}</strong></div>
+                                                            <div style="background: rgba(255,255,255,0.2); border-radius: 4px; height: 8px; overflow: hidden;">
+                                                                <div style="background: ${busFactorColor}; width: ${primaryPct}%; height: 100%; transition: width 0.3s;"></div>
+                                                            </div>
+                                                            <div style="font-size: 0.65rem; margin-top: 3px; opacity: 0.7;">${primaryPct.toFixed(0)}% of code by primary author</div>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            }
+
                                             content.innerHTML = `
                                                 <div class="panel-header">
                                                     <h2>${d.label}</h2>
                                                     <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
                                                 </div>
+                                                ${socialSection}
                                                 <div class="stat-grid">
                                                     <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
                                                     <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
@@ -645,15 +694,18 @@ public class HtmlReporter {
                                                     <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
                                                     <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
                                                 </div>
+                                                ${d.isKnowledgeIsland ? `<div class="forensic-report" style="background: #fff5f5; border-left-color: #e74c3c;"><h3 style="color: #e74c3c;">🚨 Knowledge Island Detected</h3><p>This file is <strong>primarily maintained by one developer who has been inactive for 90+ days</strong>. This represents a critical organizational risk. Consider scheduling a knowledge transfer session before making any changes.</p></div>` : ''}
                                                 ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
                                                 ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
                                                 ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                                                ${d.verdict === 'KNOWLEDGE_ISLAND' ? `<div class="forensic-report" style="background: #fff5f5; border-left-color: #e74c3c;"><h3 style="color: #e74c3c;">🚨 Knowledge Island</h3><p><strong>STOP: Do not refactor without knowledge transfer first.</strong><br><br>This file is owned by a single expert who is no longer active. Before touching this code:<br>1. Find the original author (${d.primaryAuthor})<br>2. Schedule a code walkthrough<br>3. Document tribal knowledge<br>4. Then proceed with caution.</p></div>` : ''}
                                                 ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
                                                 ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
                                                 ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
                                                 ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
                                                 ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
                                                 ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                                                ${d.verdict === 'BLOATED' ? `<div class="forensic-report"><h3>Bloated File Detected</h3><p>This file has ${d.loc.toFixed(0)} lines of code, which is above the recommended threshold. Consider splitting into smaller, focused modules to improve maintainability.</p></div>` : ''}
                                                 <div class="tips">
                                                     <h4>Tips for Improvement:</h4>
                                                     <ul>
@@ -665,6 +717,7 @@ public class HtmlReporter {
                                                 </div>
                                             `;
                                         }
+
 
                                         function hideDetails() {
                                             document.getElementById('detailsPanel').classList.remove('active');
@@ -1469,11 +1522,69 @@ public class HtmlReporter {
                         const content = document.getElementById('panelContent');
                         const badgeClass = `verdict-${d.verdict.split(' ')[0]}`;
 
+                        // Social forensics section (only if we have data)
+                        let socialSection = '';
+                        if (d.authorCount && d.authorCount > 0) {
+                            const busFactor = d.busFactor || 1;
+                            const busFactorEmoji = busFactor === 1 ? '🚨' : (busFactor <= 2 ? '⚠️' : '✅');
+                            const busFactorColor = busFactor === 1 ? '#e74c3c' : (busFactor <= 2 ? '#f39c12' : '#27ae60');
+                            const primaryPct = d.primaryAuthorPercentage || 0;
+                            // Truncate email for display
+                            const displayAuthor = d.primaryAuthor ? (d.primaryAuthor.length > 25 ? d.primaryAuthor.substring(0, 22) + '...' : d.primaryAuthor) : 'unknown';
+
+                            socialSection = `
+                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                    <h3 style="margin: 0 0 15px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                        <span>👥</span> Social Forensics
+                                    </h3>
+                                    <div style="display: flex; justify-content: space-around; align-items: flex-start; text-align: center;">
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                                <span style="font-size: 1rem;">${busFactorEmoji}</span><span>${busFactor}</span>
+                                            </div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Bus Factor</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4;">${d.authorCount}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Authors</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4;">${d.daysSinceLastCommit >= 0 ? d.daysSinceLastCommit + 'd' : '—'}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Last Commit</div>
+                                        </div>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.15); padding: 10px; border-radius: 6px; margin-top: 12px;">
+                                        <div style="font-size: 0.75rem; margin-bottom: 6px; opacity: 0.9;" title="${d.primaryAuthor || 'unknown'}">Primary: <strong>${displayAuthor}</strong></div>
+                                        <div style="background: rgba(255,255,255,0.2); border-radius: 4px; height: 6px; overflow: hidden;">
+                                            <div style="background: ${busFactorColor}; width: ${primaryPct}%; height: 100%;"></div>
+                                        </div>
+                                        <div style="font-size: 0.6rem; margin-top: 4px; opacity: 0.7;">${primaryPct.toFixed(0)}% of code</div>
+                                    </div>
+                                </div>
+                            `;
+
+                        }
+
+                        // Knowledge island warning
+                        let islandWarning = '';
+                        if (d.isKnowledgeIsland || d.verdict === 'KNOWLEDGE_ISLAND') {
+                            islandWarning = `
+                                <div style="background: #fff5f5; border-left: 4px solid #e74c3c; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                                    <h3 style="margin: 0 0 10px 0; color: #e74c3c;">🚨 Knowledge Island</h3>
+                                    <p style="margin: 0; color: #34495e;"><strong>STOP:</strong> Do not refactor without knowledge transfer first.</p>
+                                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #7f8c8d;">This file is owned by a single expert (${d.primaryAuthor || 'unknown'}) who may no longer be actively contributing. Schedule a code walkthrough before making changes.</p>
+                                </div>
+                            `;
+                        }
+
                         content.innerHTML = `
                             <div class="panel-header">
                                 <h2>${d.label}</h2>
                                 <span class="verdict-badge ${badgeClass}">${d.verdict}</span>
                             </div>
+
+                            ${socialSection}
+                            ${islandWarning}
 
                             <!-- Action Plan Section -->
                             <div class="action-plan" style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
@@ -1520,6 +1631,7 @@ public class HtmlReporter {
                         `;
                         panel.classList.add('active');
                     }
+
 
                     function hideDetails() {
                         document.getElementById('detailsPanel').classList.remove('active');

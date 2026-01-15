@@ -4,6 +4,7 @@ import com.repo.analyzer.analyzers.*;
 import com.repo.analyzer.core.*;
 import com.repo.analyzer.git.GitAnalysisResult;
 import com.repo.analyzer.git.GitMiner;
+import com.repo.analyzer.git.SocialForensics;
 import com.repo.analyzer.report.AnalysisData;
 import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
@@ -248,14 +249,22 @@ public class PolyglotApp {
             int churn = churnData.getOrDefault(relativePath, 0);
             int recentChurn = recentChurnData.getOrDefault(relativePath, 0);
             int coupledPeers = couplingData.getOrDefault(relativePath, Collections.emptySet()).size();
+            int daysSinceLastCommit = gitResult.daysSinceLastCommit(relativePath);
 
-            // Calculate risk score
+            // Mine social forensics for files with significant churn
+            SocialForensics social = SocialForensics.empty();
+            if (churn >= 3) { // Only mine blame for active files (performance optimization)
+                social = miner.mineSocialForensics(repoPath, relativePath, recentChurn, churn);
+            }
+
+            // Calculate risk score with social amplifier
             double lcom4 = metrics.cohesion() > 0 ? 1.0 / metrics.cohesion() : 1.0;
-            double riskScore = (churn * metrics.totalComplexity() * lcom4) / 100.0;
+            double baseRisk = (churn * metrics.totalComplexity() * lcom4) / 100.0;
+            double riskScore = baseRisk * social.calculateRiskMultiplier();
 
-            // Determine verdict
+            // Determine verdict with social context
             ForensicRuleEngine.EvaluationContext ctx = new ForensicRuleEngine.EvaluationContext(
-                    metrics, churn, recentChurn, coupledPeers, config);
+                    metrics, churn, recentChurn, coupledPeers, config, social);
             String verdict = ruleEngine.evaluate(ctx);
 
             // Convert to AnalysisData for reporting
@@ -265,6 +274,7 @@ public class PolyglotApp {
                     churn,
                     recentChurn,
                     coupledPeers,
+                    daysSinceLastCommit,
                     metrics.functionCount(),
                     metrics.cohesion(),
                     lcom4,
@@ -281,7 +291,13 @@ public class PolyglotApp {
                     List.of(), // lcom4Blocks
                     couplingData.getOrDefault(relativePath, Collections.emptySet()).stream()
                             .map(this::extractClassName)
-                            .collect(Collectors.toSet())));
+                            .collect(Collectors.toSet()),
+                    social.authorCount(),
+                    social.primaryAuthor(),
+                    social.primaryAuthorPercentage(),
+                    social.busFactor(),
+                    social.isKnowledgeIsland(),
+                    social.topContributors()));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(

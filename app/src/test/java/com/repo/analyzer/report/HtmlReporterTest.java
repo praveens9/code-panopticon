@@ -15,13 +15,15 @@ class HtmlReporterTest {
     void testConvertToJson() {
         AnalysisData data = new AnalysisData(
                 "backend/utils.py",
-                50, 10, 5,
-                5.0, 0.5, 2.0,
-                20.0, 10.0,
-                0.5, 0.5, 1.0,
-                100.0, 5.0,
-                "OK", false,
-                Collections.emptyList(), Collections.emptyList(), Collections.emptySet());
+                50, 10, 5, 30, // churn, recentChurn, coupledPeers, daysSinceLastCommit
+                5.0, 0.5, 2.0, // methodCount, avgFields, lcom4
+                20.0, 10.0, // totalCC, maxCC
+                0.5, 0.5, 1.0, // fanOut, afferentCoupling, instability
+                100.0, 5.0, // loc, riskScore
+                "OK", false, // verdict, isDataClass
+                Collections.emptyList(), Collections.emptyList(), Collections.emptySet(), // brainMethods, lcom4Blocks,
+                                                                                          // coupledClassNames
+                2, "test@example.com", 60.0, 2, false, Collections.emptyList()); // social forensics
 
         String json = reporter.convertToJson(List.of(data));
 
@@ -35,22 +37,24 @@ class HtmlReporterTest {
     void testConvertToHierarchyJson() {
         AnalysisData data1 = new AnalysisData(
                 "network/server.go",
-                50, 10, 5,
+                50, 10, 5, 15,
                 5.0, 0.5, 2.0,
                 20.0, 10.0,
                 0.5, 0.5, 1.0,
                 100.0, 5.0,
                 "OK", false,
-                Collections.emptyList(), Collections.emptyList(), Collections.emptySet());
+                Collections.emptyList(), Collections.emptyList(), Collections.emptySet(),
+                3, "dev@example.com", 45.0, 2, false, Collections.emptyList());
         AnalysisData data2 = new AnalysisData(
                 "README.md",
-                1, 0, 0,
+                1, 0, 0, 100,
                 1.0, 0.0, 0.0,
                 0.0, 0.0,
                 0.0, 0.0, 0.0,
                 10.0, 0.0,
                 "OK", false,
-                Collections.emptyList(), Collections.emptyList(), Collections.emptySet());
+                Collections.emptyList(), Collections.emptyList(), Collections.emptySet(),
+                1, "author@example.com", 100.0, 1, false, Collections.emptyList());
 
         String json = reporter.convertToHierarchyJson(List.of(data1, data2));
 
