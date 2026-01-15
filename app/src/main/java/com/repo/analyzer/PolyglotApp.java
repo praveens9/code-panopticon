@@ -339,7 +339,8 @@ public class PolyglotApp {
         Path htmlPath = args.outputDir().resolve("panopticon-report.html");
         Path csvPath = args.outputDir().resolve("panopticon-report.csv");
 
-        new HtmlReporter().generate(reportData, htmlPath);
+        HtmlReporter.AnalysisStats stats = new HtmlReporter.AnalysisStats(analyzed, skipped, totalFiles);
+        new HtmlReporter().generate(reportData, stats, htmlPath);
         new CsvReporter().generate(reportData, csvPath);
 
         // Generate JSON for AI/Tools

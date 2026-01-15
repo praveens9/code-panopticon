@@ -7,16 +7,24 @@ import java.util.*;
 
 public class HtmlReporter {
 
+    public record AnalysisStats(int analyzed, int skipped, int total) {
+    }
+
     private final JsonDataConverter jsonConverter = new JsonDataConverter();
 
-    public void generate(List<AnalysisData> data, Path outputPath) {
+    public void generate(List<AnalysisData> data, AnalysisStats stats, Path outputPath) {
         String json = jsonConverter.convertToDataJson(data);
+        String statsJson = String.format("{\"analyzed\": %d, \"skipped\": %d, \"total\": %d}", stats.analyzed,
+                stats.skipped, stats.total);
         String treemapJson = jsonConverter.convertToHierarchyJson(data);
+
         String networkJson = jsonConverter.convertToNetworkJson(data);
 
         String html = new StringBuilder(TEMPLATE_HEAD).append(TEMPLATE_BODY).toString()
                 .replace("{{DATA_PLACEHOLDER}}", json)
+                .replace("{{STATS_PLACEHOLDER}}", statsJson)
                 .replace("{{TREEMAP_DATA}}", treemapJson)
+
                 .replace("{{NETWORK_DATA}}", networkJson);
 
         try {
@@ -259,271 +267,432 @@ public class HtmlReporter {
             """;
 
     private static String TEMPLATE_BODY_PART1 = """
-                                <body>
-                                    <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
-                                        <div class="main-content">
-                                            <div class="container">
-                                                <h1>Code Forensics: Risk Analysis</h1>
+                                        <body>
+                                            <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
+                                                <div class="main-content">
+                                                    <div class="container">
+                                                        <h1>Code Forensics: Risk Analysis</h1>
 
-                                                <div class="tabs">
-                                                    <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
-                                                    <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                                    <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                                    <button class="tab" onclick="switchTab('network')">Coupling Graph</button>
-                                        <button class="tab" onclick="switchTab('philosophy')">Philosophy</button>
+                                                        <div class="tabs">
+                                                            <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+                                                            <button class="tab" onclick="switchTab('quadrant')">Quadrant View</button>
+                                                            <button class="tab" onclick="switchTab('table')">Data Table</button>
+                                                            <button class="tab" onclick="switchTab('treemap')">System Map</button>
+                                                            <button class="tab" onclick="switchTab('network')">Coupling Graph</button>
+                                                <button class="tab" onclick="switchTab('philosophy')">Philosophy</button>
 
-                                                </div>
+                                                        </div>
 
-                                                <!-- Quadrant Tab -->
-                                                <div id="quadrant-tab" class="tab-content active">
-                                                    <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
-                                                    <div class="chart-container">
-                                                        <canvas id="riskChart"></canvas>
-                                                    </div>
-                                                    <div class="legend">
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
-                                                    </div>
-                                                </div>
+                                                        <!-- Dashboard Tab -->
+                                                        <div id="dashboard-tab" class="tab-content active">
+                                                            <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #3498db; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Total number of source files analyzed">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #2c3e50;" id="kpi-analyzed">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Analyzed Files</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #95a5a6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Files skipped (e.g., tests, generated code)">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #7f8c8d;" id="kpi-skipped">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Skipped (Tests)</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #e74c3c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Average risk score across all analyzed files">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #e74c3c;" id="kpi-risk">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Avg Risk Score</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #2ecc71; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Total Lines of Code">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #27ae60;" id="kpi-loc">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Total LOC</div>
+                                                                </div>
+                                                            </div>
 
-                                                <!-- Table Tab -->
-                                                <div id="table-tab" class="tab-content">
-                                                    <div class="filter-row">
-                                                        <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
-                                                        <select id="verdictFilter">
-                                                            <option value="">All Verdicts</option>
-                                                        </select>
-                                                    </div>
-                                                    <table id="dataTable">
-                                                        <thead>
-                                                            <tr>
-                                                                <th onclick="sortTable(0)">Class Name ▼</th>
-                                                                <th onclick="sortTable(1)">Churn ▼</th>
-                                                                <th onclick="sortTable(2)">Recent Churn ▼</th>
-                                                                <th onclick="sortTable(3)">Risk Score ▼</th>
-                                                                <th onclick="sortTable(4)">Complexity ▼</th>
-                                                                <th onclick="sortTable(5)">LCOM4 ▼</th>
-                                                                <th onclick="sortTable(6)">Verdict ▼</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody id="tableBody"></tbody>
-                                                    </table>
-                                                </div>
+                                                            <!-- Scan Summary -->
+                                                            <div id="scan-summary" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; border-left: 5px solid #3498db;">
+                                                                <h3 style="margin-top: 0; color: #2c3e50; font-size: 1.1rem;">📊 Scan Summary</h3>
+                                                                <p id="summary-text" style="color: #34495e; font-size: 1rem; line-height: 1.5; margin: 0;">Loading summary...</p>
+                                                            </div>
 
-                                                <!-- System Map Tab -->
-                                                <div id="treemap-tab" class="tab-content">
-                                                    <div class="row">
-                                                        <div class="col-md-12">
-                                                            <div class="card">
-                                                                <div class="card-header">
-                                                                    <div class="breadcrumbs" id="breadcrumbs">
-                                                                        <span class="crumb active">root</span>
+
+
+                                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                                                <!-- Verdict Chart -->
+                                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                                                    <h3 style="margin-top: 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">Verdict Distribution</h3>
+                                                                    <div style="height: 300px; position: relative;">
+                                                                        <canvas id="verdictChart"></canvas>
                                                                     </div>
                                                                 </div>
-                                                                <div class="card-body">
-                                                                    <div id="treemap-container">
-                                                                        <div id="loading">Loading visualization...</div>
-                                                                        <svg id="treemap"></svg>
-                                                                        <div id="system-map-hud">
-                                                                            <!-- HUD Content populated by JS -->
-                                                                            <h3>Hover over a file</h3>
-                                                                            <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
-                                                                        </div>
+
+                                                                <!-- Top Risks -->
+                                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                                                    <h3 style="margin-top: 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">🔥 Top 5 Risk Files</h3>
+                                                                    <div id="top-risks-list" style="display: flex; flex-direction: column; gap: 10px;">
+                                                                        <!-- Populated by JS -->
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
-                                                        <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
-                                                    </div>
-                                                    <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
-                                                        👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
-                                                    </div>
-                                                </div>
 
-                                                <!-- Network Tab -->
-                                                <div id="network-tab" class="tab-content">
-                                                    <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
-                                                    <div id="network-container">
-                                                        <svg id="network"></svg>
-                                                    </div>
-                                                </div>
+                                                        <!-- Quadrant Tab -->
+                                                        <div id="quadrant-tab" class="tab-content">
+                                                            <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
+                                                            <div class="chart-container">
+                                                                <canvas id="riskChart"></canvas>
+                                                            </div>
+                                                            <div class="legend">
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
+                                                            </div>
+                                                        </div>
 
-                                    <!-- Philosophy Tab -->
-                                    <div id="philosophy-tab" class="tab-content">
-                                        <div style="max-width: 900px; margin: 0 auto; padding: 20px;">
-                                            <div style="text-align: center; margin-bottom: 40px;">
-                                                <h2 style="color: #2c3e50; font-size: 2rem; margin-bottom: 10px;">The Philosophy of Code Panopticon</h2>
-                                                <p style="font-size: 1.1rem; color: #7f8c8d; font-style: italic;">
-                                                    &ldquo;Code&mdash;whether written by humans or generated by AI&mdash;is maintained by humans. To understand code, you must understand its history.&rdquo;
-                                                </p>
+                                                        <!-- Table Tab -->
+                                                        <div id="table-tab" class="tab-content">
+                                                            <div class="filter-row">
+                                                                <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
+                                                                <select id="verdictFilter">
+                                                                    <option value="">All Verdicts</option>
+                                                                </select>
+                                                            </div>
+                                                            <table id="dataTable">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th onclick="sortTable(0)">Class Name ▼</th>
+                                                                        <th onclick="sortTable(1)">Churn ▼</th>
+                                                                        <th onclick="sortTable(2)">Recent Churn ▼</th>
+                                                                        <th onclick="sortTable(3)">Risk Score ▼</th>
+                                                                        <th onclick="sortTable(4)">Complexity ▼</th>
+                                                                        <th onclick="sortTable(5)">LCOM4 ▼</th>
+                                                                        <th onclick="sortTable(6)">Verdict ▼</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="tableBody"></tbody>
+                                                            </table>
+                                                        </div>
+
+                                                        <!-- System Map Tab -->
+                                                        <div id="treemap-tab" class="tab-content">
+                                                            <div class="row">
+                                                                <div class="col-md-12">
+                                                                    <div class="card">
+                                                                        <div class="card-header">
+                                                                            <div class="breadcrumbs" id="breadcrumbs">
+                                                                                <span class="crumb active">root</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div id="treemap-container">
+                                                                                <div id="loading">Loading visualization...</div>
+                                                                                <svg id="treemap"></svg>
+                                                                                <div id="system-map-hud">
+                                                                                    <!-- HUD Content populated by JS -->
+                                                                                    <h3>Hover over a file</h3>
+                                                                                    <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                                                <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                                            </div>
+                                                            <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                                                👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Network Tab -->
+                                                        <div id="network-tab" class="tab-content">
+                                                            <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
+                                                            <div id="network-container">
+                                                                <svg id="network"></svg>
+                                                            </div>
+                                                        </div>
+
+                                            <!-- Philosophy Tab -->
+                                            <div id="philosophy-tab" class="tab-content">
+                                                <div style="max-width: 900px; margin: 0 auto; padding: 20px;">
+                                                    <div style="text-align: center; margin-bottom: 40px;">
+                                                        <h2 style="color: #2c3e50; font-size: 2rem; margin-bottom: 10px;">The Philosophy of Code Panopticon</h2>
+                                                        <p style="font-size: 1.1rem; color: #7f8c8d; font-style: italic;">
+                                                            &ldquo;Code&mdash;whether written by humans or generated by AI&mdash;is maintained by humans. To understand code, you must understand its history.&rdquo;
+                                                        </p>
+                                                    </div>
+
+                                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px;">
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3498db;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">📐</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Structure</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Complexity, Cohesion, Coupling. How hard is the code to understand?</p>
+                                                        </div>
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #e67e22;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">⏱️</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Evolution</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Churn, Hotspots, Coupling. How is the code changing over time?</p>
+                                                        </div>
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #2ecc71;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">👥</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Social</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Knowledge Islands, Bus Factor. Who owns this code?</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Hotspot Metrics</h3>
+                                                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                                        <thead>
+                                                            <tr style="border-bottom: 2px solid #ddd;">
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Metric</th>
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Meaning</th>
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Why It Matters</th>
+                                                            </tr>
+
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Churn</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Total commits touching the file</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High churn = High maintenance cost.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Complexity (CC)</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Cyclomatic Complexity</td><td style="padding: 12px; border-bottom: 1px solid #eee;">Hard to test, harder to reason about.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>LCOM4</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Lack of Cohesion</td><td style="padding: 12px; border-bottom: 1px solid #eee;">LCOM4 &gt; 1 means the class does too many things.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Fan-Out</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Outgoing dependencies</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High coupling makes code fragile.</td></tr>
+                                                        </tbody>
+                                                    </table>
+
+                                                     <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Verdict Decoder</h3>
+                                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                                        <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
+                                                            <strong style="color: #c0392b;">TOTAL_MESS</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">High Complexity + High Churn. The burning platform. Refactor immediately.</p>
+                                                        </div>
+                                                        <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
+                                                            <strong style="color: #c0392b;">KNOWLEDGE_ISLAND</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Maintained by a single person who is inactive. Critical organizational risk.</p>
+                                                        </div>
+                                                        <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
+                                                            <strong style="color: #d35400;">GOD_CLASS</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Knows too much, does too much. Split responsibilities.</p>
+                                                        </div>
+                                                         <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
+                                                            <strong style="color: #d35400;">UNTESTED_HOTSPOT</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Complex and changing, but no tests found. Danger zone.</p>
+                                                        </div>
+                                                     </div>
+
+                                                     <div style="margin-top: 40px; background: #e8f6f3; padding: 20px; border-radius: 8px; text-align: center;">
+                                                        <h3 style="margin-top: 0; color: #16a085;">The Panopticon Rule</h3>
+                                                        <p style="font-size: 1.1rem; color: #2c3e50; font-weight: bold;">&ldquo;Complexity is only a problem if we have to work with it.&rdquo;</p>
+                                                        <p style="color: #7f8c8d;">Don't fix stable code. Fix the Hotspots.</p>
+                                                     </div>
+                                                </div>
                                             </div>
 
-                                            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px;">
-                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3498db;">
-                                                    <div style="font-size: 2rem; margin-bottom: 10px;">📐</div>
-                                                    <h3 style="margin: 0 0 10px 0; color: #34495e;">Structure</h3>
-                                                    <p style="font-size: 0.9rem; color: #7f8c8d;">Complexity, Cohesion, Coupling. How hard is the code to understand?</p>
+                                                    </div>
                                                 </div>
-                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #e67e22;">
-                                                    <div style="font-size: 2rem; margin-bottom: 10px;">⏱️</div>
-                                                    <h3 style="margin: 0 0 10px 0; color: #34495e;">Evolution</h3>
-                                                    <p style="font-size: 0.9rem; color: #7f8c8d;">Churn, Hotspots, Coupling. How is the code changing over time?</p>
-                                                </div>
-                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #2ecc71;">
-                                                    <div style="font-size: 2rem; margin-bottom: 10px;">👥</div>
-                                                    <h3 style="margin: 0 0 10px 0; color: #34495e;">Social</h3>
-                                                    <p style="font-size: 0.9rem; color: #7f8c8d;">Knowledge Islands, Bus Factor. Who owns this code?</p>
+
+                                                <div id="detailsPanel">
+                                                    <button class="close-btn" onclick="hideDetails()">&times;</button>
+                                                    <div id="panelContent"></div>
                                                 </div>
                                             </div>
 
-                                            <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Hotspot Metrics</h3>
-                                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
-                                                <thead>
-                                                    <tr style="border-bottom: 2px solid #ddd;">
-                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Metric</th>
-                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Meaning</th>
-                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Why It Matters</th>
-                                                    </tr>
+                                            <script>
+                                                const stats = {{STATS_PLACEHOLDER}};
+                                                const rawData = {{DATA_PLACEHOLDER}};
 
-                                                </thead>
-                                                <tbody>
-                                                    <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Churn</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Total commits touching the file</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High churn = High maintenance cost.</td></tr>
-                                                    <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Complexity (CC)</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Cyclomatic Complexity</td><td style="padding: 12px; border-bottom: 1px solid #eee;">Hard to test, harder to reason about.</td></tr>
-                                                    <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>LCOM4</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Lack of Cohesion</td><td style="padding: 12px; border-bottom: 1px solid #eee;">LCOM4 &gt; 1 means the class does too many things.</td></tr>
-                                                    <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Fan-Out</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Outgoing dependencies</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High coupling makes code fragile.</td></tr>
-                                                </tbody>
-                                            </table>
+                                                const treemapData = {{TREEMAP_DATA}};
+                                                const networkData = {{NETWORK_DATA}};
+                                                let currentSort = { column: 3, ascending: false };
 
-                                             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Verdict Decoder</h3>
-                                             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-                                                <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
-                                                    <strong style="color: #c0392b;">TOTAL_MESS</strong>
-                                                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">High Complexity + High Churn. The burning platform. Refactor immediately.</p>
-                                                </div>
-                                                <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
-                                                    <strong style="color: #c0392b;">KNOWLEDGE_ISLAND</strong>
-                                                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Maintained by a single person who is inactive. Critical organizational risk.</p>
-                                                </div>
-                                                <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
-                                                    <strong style="color: #d35400;">GOD_CLASS</strong>
-                                                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Knows too much, does too much. Split responsibilities.</p>
-                                                </div>
-                                                 <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
-                                                    <strong style="color: #d35400;">UNTESTED_HOTSPOT</strong>
-                                                    <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Complex and changing, but no tests found. Danger zone.</p>
-                                                </div>
-                                             </div>
+                                                // Populate verdict filter dynamically
+                                                try {
+                                                    const uniqueVerdicts = [...new Set(rawData.map(d => d.verdict))].filter(v => v).sort();
+                                                    const filterSelect = document.getElementById('verdictFilter');
+                                                    if (filterSelect) {
+                                                        uniqueVerdicts.forEach(v => {
+                                                            const option = document.createElement('option');
+                                                            option.value = v;
+                                                            option.textContent = v;
+                                                            filterSelect.appendChild(option);
+                                                        });
+                                                    }
+                                                } catch (e) { console.error("Error populating filter", e); }
 
-                                             <div style="margin-top: 40px; background: #e8f6f3; padding: 20px; border-radius: 8px; text-align: center;">
-                                                <h3 style="margin-top: 0; color: #16a085;">The Panopticon Rule</h3>
-                                                <p style="font-size: 1.1rem; color: #2c3e50; font-weight: bold;">&ldquo;Complexity is only a problem if we have to work with it.&rdquo;</p>
-                                                <p style="color: #7f8c8d;">Don't fix stable code. Fix the Hotspots.</p>
-                                             </div>
-                                        </div>
-                                    </div>
 
-                                            </div>
-                                        </div>
 
-                                        <div id="detailsPanel">
-                                            <button class="close-btn" onclick="hideDetails()">&times;</button>
-                                            <div id="panelContent"></div>
-                                        </div>
-                                    </div>
+                                                // Fix: Hide loading overlay immediately as data is embedded
+                                                try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
 
-                                    <script>
-                                        const rawData = {{DATA_PLACEHOLDER}};
-                                        const treemapData = {{TREEMAP_DATA}};
-                                        const networkData = {{NETWORK_DATA}};
-                                        let currentSort = { column: 3, ascending: false };
+                                                // Tab switching
+                                                function switchTab(tabName) {
+                                                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                                                    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-                                        // Populate verdict filter dynamically
-                                        try {
-                                            const uniqueVerdicts = [...new Set(rawData.map(d => d.verdict))].filter(v => v).sort();
-                                            const filterSelect = document.getElementById('verdictFilter');
-                                            if (filterSelect) {
-                                                uniqueVerdicts.forEach(v => {
-                                                    const option = document.createElement('option');
-                                                    option.value = v;
-                                                    option.textContent = v;
-                                                    filterSelect.appendChild(option);
-                                                });
-                                            }
-                                        } catch (e) { console.error("Error populating filter", e); }
+                                                    event.target.classList.add('active');
+                                                    document.getElementById(tabName + '-tab').classList.add('active');
 
-                                        // Fix: Hide loading overlay immediately as data is embedded
-                                        try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
+                                                    if (tabName === 'table') renderTable();
+                                                    if (tabName === 'treemap') renderTreemap();
+                                                    if (tabName === 'network') renderNetwork();
+                                                }
 
-                                        // Tab switching
-                                        function switchTab(tabName) {
-                                            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                                            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                                                const getColor = (riskScore) => {
+                                                    // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                                                    if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                                                    if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                                                    return 'rgba(46, 204, 113, 0.7)'; // Green
+                                                };
 
-                                            event.target.classList.add('active');
-                                            document.getElementById(tabName + '-tab').classList.add('active');
+                                                const getRiskColor = (d) => {
+                                                    // Use Verdict for explicit coloring if available
+                                                    const v = d.verdict;
+                                                    if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                                                    if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
 
-                                            if (tabName === 'table') renderTable();
-                                            if (tabName === 'treemap') renderTreemap();
-                                            if (tabName === 'network') renderNetwork();
-                                        }
+                                                    // Fallback to numeric risk score
+                                                    const score = d.riskScore || 0;
+                                                    if (score > 20) return '#e74c3c';
+                                                    if (score > 5) return '#f39c12';
+                                                    return '#27ae60'; // Green
+                                                };
 
-                                        const getColor = (riskScore) => {
-                                            // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
-                                            if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
-                                            if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
-                                            return 'rgba(46, 204, 113, 0.7)'; // Green
-                                        };
+                                                // Dashboard Init
+                                                function initDashboard() {
+                                                    // KPIs
+                                                    document.getElementById('kpi-analyzed').textContent = stats.analyzed;
+                                                    document.getElementById('kpi-skipped').textContent = stats.skipped;
+                                                    const avgRisk = rawData.reduce((sum, d) => sum + d.riskScore, 0) / (rawData.length || 1);
+                                                    document.getElementById('kpi-risk').textContent = avgRisk.toFixed(1);
+                                                    const totalLoc = rawData.reduce((sum, d) => sum + d.loc, 0);
+                                                    document.getElementById('kpi-loc').textContent = totalLoc.toLocaleString();
 
-                                        const getRiskColor = (d) => {
-                                            // Use Verdict for explicit coloring if available
-                                            const v = d.verdict;
-                                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
-                                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+                                                    // Scan Summary
+                                                    const highRisks = rawData.filter(d => d.riskScore > 5).sort((a,b) => b.riskScore - a.riskScore);
+                                                    const highRiskCount = highRisks.length;
+                                                    const primaryLang = [...new Set(rawData.map(d => d.language || 'generic'))].sort((a,b) =>
+                                                        rawData.filter(d => d.language === b).length - rawData.filter(d => d.language === a).length
+                                                    )[0] || 'Generic'; // Mode language
 
-                                            // Fallback to numeric risk score
-                                            const score = d.riskScore || 0;
-                                            if (score > 20) return '#e74c3c';
-                                            if (score > 5) return '#f39c12';
-                                            return '#27ae60'; // Green
-                                        };
+                                                    let hotspotDetail = "";
+                                                    if (highRiskCount === 0) {
+                                                        hotspotDetail = "Great work! No significant hotspots found.";
+                                                    } else if (highRiskCount <= 3) {
+                                                        const names = highRisks.map(d => `<code>${d.label}</code>`).join(', ');
+                                                        hotspotDetail = `The hotspots are: ${names}.`;
+                                                    } else {
+                                                        hotspotDetail = `The highest risk file is <code>${highRisks[0].label}</code> (Risk: ${highRisks[0].riskScore.toFixed(1)}).`;
+                                                    }
 
-                                        // Quadrant Chart with Dynamic Axis Scaling
-                                        const ctx = document.getElementById('riskChart').getContext('2d');
+                                                    const summaryText = `
+                                                        scanned <strong>${stats.analyzed} files</strong> (skipped ${stats.skipped} test files).
+                                                        The codebase is primarily <strong>${primaryLang}</strong>.
+                                                        We found <strong>${highRiskCount} hotspots</strong> (Risk Score > 5) that require attention.
+                                                        ${hotspotDetail}
+                                                    `;
+                                                    document.getElementById('summary-text').innerHTML = summaryText;
 
-                                        // Calculate dynamic axis bounds based on data
-                                        const maxChurn = Math.max(...rawData.map(d => d.x), 10);
-                                        const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
-                                        const xAxisMax = Math.ceil(maxChurn * 1.2);
-                                        const yAxisMax = Math.ceil(maxComplexity * 1.1);
 
-                                        // Calculate percentile-based dividers (75th percentile)
-                                        const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
-                                        const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
-                                        const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
-                                        const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+                                                    // Top Risks
+                                                    const topRisks = [...rawData].sort((a, b) => b.riskScore - a.riskScore).slice(0, 5);
+                                                    const list = document.getElementById('top-risks-list');
+                                                    list.innerHTML = ''; // Clear existing
+                                                    topRisks.forEach((d, i) => {
+                                                        const item = document.createElement('div');
+                                                        const riskColor = getRiskColor(d);
+                                                        item.style.cssText = "display: flex; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #eee; transition: background 0.2s;";
+                                                        item.onmouseover = () => item.style.background = '#f9f9f9';
+                                                        item.onmouseout = () => item.style.background = '#fff';
 
-                                        const backgroundZones = {
-                                            id: 'backgroundZones',
-                                            beforeDraw: (chart) => {
-                                                const ctx = chart.ctx;
-                                                const chartArea = chart.chartArea;
-                                                const xScale = chart.scales.x;
-                                                const yScale = chart.scales.y;
-                                                const xMid = xScale.getPixelForValue(churnDivider);
-                                                const yMid = yScale.getPixelForValue(complexityDivider);
-                                                ctx.save();
-                                                ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
-                                                ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
-                                                ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
-                                                ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
-                                                ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
-                                                ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
-                                                ctx.restore();
-                                            }
-                                        };
+                                                        item.innerHTML = `
+                                                            <div style="font-weight: bold; color: #95a5a6; width: 30px; font-size: 1.1rem;">${i+1}.</div>
+                                                            <div style="flex: 1; overflow: hidden; padding-right: 10px;">
+                                                                <div style="font-family: monospace; font-size: 0.95rem; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.label}">${d.label}</div>
+                                                            </div>
+                                                            <div style="text-align: right; min-width: 140px;">
+                                                                <span style="font-weight: bold; color: ${riskColor};">Risk: ${d.riskScore.toFixed(1)}</span>
+                                                                <span style="font-size: 0.8rem; background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${d.verdict}</span>
+                                                            </div>
+                                                        `;
+                                                        list.appendChild(item);
+                                                    });
+
+                                                    // Verdict Chart
+                                                    if (typeof Chart !== 'undefined') {
+                                                        const verdictCounts = {};
+                                                        rawData.forEach(d => { verdictCounts[d.verdict] = (verdictCounts[d.verdict] || 0) + 1; });
+                                                        const verdictLabels = Object.keys(verdictCounts);
+                                                        const verdictValues = Object.values(verdictCounts);
+
+                                                        new Chart(document.getElementById('verdictChart'), {
+                                                            type: 'doughnut',
+                                                            data: {
+                                                                labels: verdictLabels,
+                                                                datasets: [{
+                                                                    data: verdictValues,
+                                                                    backgroundColor: verdictLabels.map(v => {
+                                                                        const d = {verdict: v}; // Mock for color function
+                                                                        return getRiskColor(d);
+                                                                    })
+                                                                }]
+                                                            },
+                                                            options: {
+                                                                responsive: true,
+                                                                maintainAspectRatio: false,
+                                                                plugins: {
+                                                                    legend: { position: 'right' }
+                                                                },
+                                                                onClick: (e, elements) => {
+                                                                    if (elements.length > 0) {
+                                                                        const index = elements[0].index;
+                                                                        const verdict = verdictLabels[index];
+                                                                        // Filter table by verdict and switch tab
+                                                                        const filterSelect = document.getElementById('verdictFilter');
+                                                                        if(filterSelect) filterSelect.value = verdict;
+                                                                        switchTab('table');
+                                                                        // Trigger change event if needed for table filter
+                                                                        filterSelect.dispatchEvent(new Event('change'));
+                                                                    }
+                                                                }
+                                                            }
+                                                        });
+                                                    } else {
+                                                        document.getElementById('verdictChart').parentElement.innerHTML = '<div style="padding: 20px; text-align: center; color: #e74c3c;">Chart.js failed to load. Please check internet connection.</div>';
+                                                    }
+                                                }
+
+                                                // Run init - AFTER helpers are defined
+                                                try { initDashboard(); } catch(e) { console.error("Dashboard init error", e); }
+
+                                                const ctx = document.getElementById('riskChart').getContext('2d');
+
+                                                // Calculate dynamic axis bounds based on data
+                                                const maxChurn = Math.max(...rawData.map(d => d.x), 10);
+                                                const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
+                                                const xAxisMax = Math.ceil(maxChurn * 1.2);
+                                                const yAxisMax = Math.ceil(maxComplexity * 1.1);
+
+                                                // Calculate percentile-based dividers (75th percentile)
+                                                const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
+                                                const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
+                                                const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
+                                                const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+
+                                                const backgroundZones = {
+                                                    id: 'backgroundZones',
+                                                    beforeDraw: (chart) => {
+                                                        const ctx = chart.ctx;
+                                                        const chartArea = chart.chartArea;
+                                                        const xScale = chart.scales.x;
+                                                        const yScale = chart.scales.y;
+                                                        const xMid = xScale.getPixelForValue(churnDivider);
+                                                        const yMid = yScale.getPixelForValue(complexityDivider);
+                                                        ctx.save();
+                                                        ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+                                                        ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
+                                                        ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
+                                                        ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
+                                                        ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+                                                        ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
+                                                        ctx.restore();
+                                                    }
+                                                };
+            """;
+    private static String TEMPLATE_BODY_PART1_B = """
 
                                         const chart = new Chart(ctx, {
                                             type: 'bubble',
@@ -1750,6 +1919,6 @@ public class HtmlReporter {
 
     private static final String TEMPLATE_BODY;
     static {
-        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
+        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART1_B + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
     }
 }
