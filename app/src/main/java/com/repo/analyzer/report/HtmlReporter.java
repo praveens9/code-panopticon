@@ -382,11 +382,12 @@ public class HtmlReporter {
                                             <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Hotspot Metrics</h3>
                                             <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
                                                 <thead>
-                                                    <tr style="background: #f8f9fa; border-bottom: 2px solid #ddd;">
-                                                        <th style="padding: 12px; text-align: left; color: #2c3e50;">Metric</th>
-                                                        <th style="padding: 12px; text-align: left; color: #2c3e50;">Meaning</th>
-                                                        <th style="padding: 12px; text-align: left; color: #2c3e50;">Why It Matters</th>
+                                                    <tr style="border-bottom: 2px solid #ddd;">
+                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Metric</th>
+                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Meaning</th>
+                                                        <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Why It Matters</th>
                                                     </tr>
+
                                                 </thead>
                                                 <tbody>
                                                     <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Churn</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Total commits touching the file</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High churn = High maintenance cost.</td></tr>
