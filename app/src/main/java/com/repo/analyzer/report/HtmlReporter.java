@@ -4,14 +4,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class HtmlReporter {
 
+    private final JsonDataConverter jsonConverter = new JsonDataConverter();
+
     public void generate(List<AnalysisData> data, Path outputPath) {
-        String json = convertToJson(data);
-        String treemapJson = convertToHierarchyJson(data);
-        String networkJson = convertToNetworkJson(data);
+        String json = jsonConverter.convertToDataJson(data);
+        String treemapJson = jsonConverter.convertToHierarchyJson(data);
+        String networkJson = jsonConverter.convertToNetworkJson(data);
 
         String html = new StringBuilder(TEMPLATE_HEAD).append(TEMPLATE_BODY).toString()
                 .replace("{{DATA_PLACEHOLDER}}", json)
@@ -26,166 +27,13 @@ public class HtmlReporter {
         }
     }
 
+    // Keep these package-private for tests - delegate to JsonDataConverter
     String convertToJson(List<AnalysisData> data) {
-        return data.stream()
-                .map(d -> String.format(
-                        "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f, daysSinceLastCommit: %d, authorCount: %d, primaryAuthor: '%s', primaryAuthorPercentage: %.1f, busFactor: %d, isKnowledgeIsland: %b }",
-                        d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, d.className(), d.avgFields(), d.maxCC(),
-                        d.coupledPeers(), d.verdict(), d.isDataClass(),
-                        d.brainMethods().stream().map(s -> "'" + s + "'").collect(Collectors.joining(", ")),
-                        d.lcom4Blocks().stream()
-                                .map(block -> block.stream().map(s -> "'" + s + "'")
-                                        .collect(Collectors.joining(", ", "[", "]")))
-                                .collect(Collectors.joining(", ", "[", "]")),
-                        d.churn(), d.recentChurn(), d.lcom4(),
-                        d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore(),
-                        d.daysSinceLastCommit(), d.authorCount(),
-                        d.primaryAuthor().replace("'", "\\'"), // Escape quotes in author email
-                        d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland()))
-                .collect(Collectors.joining(", ", "[", "]"));
+        return jsonConverter.convertToDataJson(data);
     }
 
     String convertToHierarchyJson(List<AnalysisData> data) {
-        HierarchyNode root = new HierarchyNode("root", "root");
-
-        for (AnalysisData d : data) {
-            String[] parts = d.className().split("/");
-            // Group root-level files to avoid clutter
-            if (parts.length == 1) {
-                parts = new String[] { "Root Files", parts[0] };
-            }
-
-            HierarchyNode current = root;
-
-            // Build/Traverse the tree structure
-            for (int i = 0; i < parts.length; i++) {
-                String part = parts[i];
-                boolean isFile = (i == parts.length - 1);
-                String fullPath = d.className(); // Simplified, conceptually path up to here
-
-                HierarchyNode child = current.findChild(part);
-                if (child == null) {
-                    child = new HierarchyNode(part, isFile ? fullPath : part); // Only leaves need full path really
-                    current.children.add(child);
-                }
-                current = child;
-
-                // If it's a leaf (file), add the data
-                if (isFile) {
-                    current.value = d.loc(); // Size = LOC
-                    current.riskScore = d.riskScore();
-                    current.verdict = d.verdict();
-                    current.complexity = d.totalCC();
-                    current.churn = d.churn();
-                }
-            }
-        }
-        return root.toJson();
-    }
-
-    private static class HierarchyNode {
-        String name;
-        String fullName;
-        List<HierarchyNode> children = new ArrayList<>();
-        Double value; // LOC
-        Double riskScore;
-        Double complexity;
-        Integer churn;
-        String verdict;
-
-        HierarchyNode(String name, String fullName) {
-            this.name = name;
-            this.fullName = fullName;
-        }
-
-        HierarchyNode findChild(String name) {
-            for (HierarchyNode c : children) {
-                if (c.name.equals(name))
-                    return c;
-            }
-            return null;
-        }
-
-        String toJson() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{");
-            sb.append("\"name\":\"").append(name).append("\"");
-
-            if (!children.isEmpty()) {
-                sb.append(",\"children\":[");
-                sb.append(children.stream().map(HierarchyNode::toJson).collect(Collectors.joining(",")));
-                sb.append("]");
-            } else {
-                // Leaf properties
-                sb.append(",\"value\":").append(value != null ? value : 0);
-                sb.append(",\"riskScore\":").append(riskScore != null ? riskScore : 0);
-                sb.append(",\"complexity\":").append(complexity != null ? complexity : 0);
-                sb.append(",\"churn\":").append(churn != null ? churn : 0);
-                sb.append(",\"verdict\":\"").append(verdict != null ? verdict : "OK").append("\"");
-                sb.append(",\"fullName\":\"").append(fullName != null ? fullName : "").append("\"");
-            }
-            sb.append("}");
-            return sb.toString();
-        }
-    }
-
-    private String convertToNetworkJson(List<AnalysisData> data) {
-        // Only show top 50 riskiest classes to keep graph manageable
-        List<AnalysisData> topRisky = data.stream()
-                .filter(d -> d.coupledPeers() > 0)
-                .sorted((a, b) -> Double.compare(b.riskScore(), a.riskScore()))
-                .limit(50)
-                .collect(Collectors.toList());
-
-        StringBuilder nodes = new StringBuilder("[");
-        StringBuilder links = new StringBuilder("[");
-
-        boolean firstNode = true;
-        Map<String, Integer> nodeIndex = new HashMap<>();
-        Set<String> nodeIds = new HashSet<>();
-        int index = 0;
-
-        for (AnalysisData d : topRisky) {
-            if (!firstNode)
-                nodes.append(",");
-            firstNode = false;
-
-            String shortName = d.className(); // Use full path as requested
-            nodes.append(String.format(
-                    "{\"id\":\"%s\",\"name\":\"%s\",\"riskScore\":%.2f,\"coupled\":%d,\"verdict\":\"%s\"}",
-                    d.className(), shortName, d.riskScore(), d.coupledPeers(), d.verdict()));
-            nodeIndex.put(d.className(), index++);
-            nodeIds.add(d.className());
-        }
-        nodes.append("]");
-
-        // Create links: connect classes based on REAL temporal coupling
-        boolean firstLink = true;
-        for (AnalysisData source : topRisky) {
-            for (String coupledClassName : source.coupledClassNames()) {
-                // Check if coupled class is also in our top risky list (to keep graph connected
-                // and relevant)
-                // or if we want to show it even if it's not "risky" itself?
-                // For simplicity and graph cleanliness, only link if both are in the graph or
-                // if it's one level deep.
-                // Let's stick to linking nodes that exist in our graph.
-
-                if (nodeIds.contains(coupledClassName) && source.className().compareTo(coupledClassName) < 0) {
-                    // Avoid duplicate links (A->B and B->A) by comparing class names
-                    if (!firstLink)
-                        links.append(",");
-                    firstLink = false;
-
-                    links.append(String.format(
-                            "{\"source\":\"%s\",\"target\":\"%s\",\"value\":1}", // Value could be coupling strength if
-                                                                                 // we tracked it per-pair
-                            source.className(), coupledClassName));
-                }
-            }
-        }
-        links.append("]");
-
-        return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
+        return jsonConverter.convertToHierarchyJson(data);
     }
 
     private static final String TEMPLATE_HEAD = """
