@@ -1445,19 +1445,26 @@ public class HtmlReporter {
                             const score = d.testabilityScore || 0;
                             const isUntestedHotspot = d.isUntestedHotspot || d.verdict === 'UNTESTED_HOTSPOT';
 
-                            // Warning for untested hotspot
+                            // Dynamic background based on health
+                            const bgGradient = (score >= 40 || hasTest)
+                                ? "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" // Green (Good)
+                                : "linear-gradient(135deg, #455a64 0%, #607d8b 100%)"; // Blue-Grey (Neutral/Needs Work)
+
+                            // Warning for untested hotspot (High contrast)
                             let hotspotWarning = '';
                             if (isUntestedHotspot) {
                                 hotspotWarning = `
-                                    <div style="margin-top: 10px; background: rgba(231, 76, 60, 0.2); border: 1px solid #e74c3c; border-radius: 4px; padding: 8px; font-size: 0.8rem; color: #c0392b;">
-                                        <strong>⚠️ Danger Zone:</strong> High risk + Frequent changes + No tests.<br/>Safety net needed before refactoring.
+                                    <div style="margin-top: 12px; background: #ffebee; border-left: 4px solid #c62828; border-radius: 4px; padding: 10px; font-size: 0.85rem; color: #b71c1c; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                        <div style="font-weight: bold; margin-bottom: 4px;">⚠️ Danger Zone</div>
+                                        <div>High risk + Frequent changes + No tests.</div>
+                                        <div style="margin-top: 4px; font-style: italic;">Safety net needed before refactoring.</div>
                                     </div>
                                 `;
                             }
 
                             testabilitySection = `
-                                <div style="background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
-                                    <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                <div style="background: ${bgGradient}; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; color: white;">
                                         <span>🧪</span> Testability X-Ray
                                     </h3>
                                     <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
@@ -1471,7 +1478,7 @@ public class HtmlReporter {
                                         </div>
                                     </div>
                                     ${hotspotWarning}
-                                    ${d.testFilePath ? `<div style="font-size: 0.7rem; text-align: center; margin-top: 8px; opacity: 0.9; word-break: break-all;"><code>${d.testFilePath}</code></div>` : ''}
+                                    ${d.testFilePath ? `<div style="font-size: 0.75rem; text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); word-break: break-all;"><code>${d.testFilePath}</code></div>` : ''}
                                 </div>
                             `;
                         }

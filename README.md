@@ -94,9 +94,25 @@ The goal: Identify **"Burning Platforms"**—highly active files that are struct
 |---------|---------|--------|
 | **UNTESTED_HOTSPOT** | High risk + No test coverage | **Write tests before refactoring** |
 
+
+### ⚠️ Verdict Priority (Masking Rules)
+The system uses a strict priority engine. Even if a file has multiple issues (e.g., it is both a `TOTAL_MESS` and has no tests), only the **highest priority verdict** is displayed to focus your attention on the most critical risk.
+
+| Priority | Verdict | Why? |
+|----------|---------|------|
+| **0 (Highest)** | **KNOWLEDGE_ISLAND** | 🚨 **Social Risk**: If the only expert leaves, the code becomes unmaintainable. |
+| **1** | **SHOTGUN_SURGERY** | 🌊 **Architecture Risk**: Changing this file breaks the system everywhere. |
+| **2** | **UNTESTED_HOTSPOT** | 🔥 **Safety Risk**: High complexity/churn with no safety net. |
+| **3** | **HIDDEN_DEPENDENCY** | 🕸️ **Hidden Risk**: Invisible coupling. |
+| **4** | **GOD_CLASS** / **TOTAL_MESS** | 🏗️ **Local Risk**: Bad design within the file. |
+| **5 (Lowest)** | **BLOATED** / **COMPLEX** | ⚠️ **Warning**: Code smell. |
+
+> *Example: A file that is a `TOTAL_MESS` and has no tests (`UNTESTED_HOTSPOT`) but is maintained by a single person will be labeled **KNOWLEDGE_ISLAND**. Fix the knowledge gap first (Code Walkthrough), then add tests, then refactor.*
+
 ---
 
 ## 🏃 How to Run
+
 
 ### Prerequisites
 - Java 17+
