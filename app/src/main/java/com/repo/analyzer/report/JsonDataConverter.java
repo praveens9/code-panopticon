@@ -20,34 +20,38 @@ public class JsonDataConverter {
 
     private String dataToJson(AnalysisData d) {
         return String.format(
-                "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, " +
-                        "verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, " +
-                        "recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, " +
-                        "loc: %.0f, riskScore: %.2f, daysSinceLastCommit: %d, authorCount: %d, " +
-                        "primaryAuthor: '%s', primaryAuthorPercentage: %.1f, busFactor: %d, isKnowledgeIsland: %b, " +
-                        "hasTestFile: %b, testFilePath: '%s', testabilityScore: %d, isUntestedHotspot: %b }",
-                d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, escapeJs(d.className()),
+                "{ \"x\": %d, \"y\": %.2f, \"r\": %.2f, \"label\": \"%s\", \"cohesion\": %.2f, \"maxCC\": %.2f, \"coupled\": %d, "
+                        +
+                        "\"verdict\": \"%s\", \"isDataClass\": %b, \"brainMethods\": [%s], \"lcom4Blocks\": %s, \"churn\": %d, "
+                        +
+                        "\"recentChurn\": %d, \"lcom4\": %.2f, \"fanOut\": %.0f, \"afferentCoupling\": %.0f, \"instability\": %.2f, "
+                        +
+                        "\"loc\": %.0f, \"riskScore\": %.2f, \"daysSinceLastCommit\": %d, \"authorCount\": %d, " +
+                        "\"primaryAuthor\": \"%s\", \"primaryAuthorPercentage\": %.1f, \"busFactor\": %d, \"isKnowledgeIsland\": %b, "
+                        +
+                        "\"hasTestFile\": %b, \"testFilePath\": \"%s\", \"testabilityScore\": %d, \"isUntestedHotspot\": %b }",
+                d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, escapeJson(d.className()),
                 d.avgFields(), d.maxCC(), d.coupledPeers(), d.verdict(), d.isDataClass(),
                 formatBrainMethods(d.brainMethods()),
                 formatLcom4Blocks(d.lcom4Blocks()),
                 d.churn(), d.recentChurn(), d.lcom4(),
                 d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore(),
                 d.daysSinceLastCommit(), d.authorCount(),
-                escapeJs(d.primaryAuthor()),
+                escapeJson(d.primaryAuthor()),
                 d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland(),
-                d.hasTestFile(), escapeJs(d.testFilePath()), d.testabilityScore(), d.isUntestedHotspot());
+                d.hasTestFile(), escapeJson(d.testFilePath()), d.testabilityScore(), d.isUntestedHotspot());
     }
 
     private String formatBrainMethods(List<String> methods) {
         return methods.stream()
-                .map(s -> "'" + escapeJs(s) + "'")
+                .map(s -> "\"" + escapeJson(s) + "\"")
                 .collect(Collectors.joining(", "));
     }
 
     private String formatLcom4Blocks(List<? extends Collection<String>> blocks) {
         return blocks.stream()
                 .map(block -> block.stream()
-                        .map(s -> "'" + escapeJs(s) + "'")
+                        .map(s -> "\"" + escapeJson(s) + "\"")
                         .collect(Collectors.joining(", ", "[", "]")))
                 .collect(Collectors.joining(", ", "[", "]"));
     }
@@ -141,12 +145,6 @@ public class JsonDataConverter {
         links.append("]");
 
         return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
-    }
-
-    private String escapeJs(String s) {
-        if (s == null)
-            return "";
-        return s.replace("\\", "\\\\").replace("'", "\\'");
     }
 
     private String escapeJson(String s) {
