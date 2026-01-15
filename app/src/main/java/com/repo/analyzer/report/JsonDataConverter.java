@@ -18,6 +18,37 @@ public class JsonDataConverter {
                 .collect(Collectors.joining(", ", "[", "]"));
     }
 
+    /**
+     * Converts analysis data to a self-describing JSON object with metadata and
+     * schema.
+     * best suited for AI Agents and external tools.
+     */
+    public String convertToSelfDescribingJson(List<AnalysisData> data) {
+        String filesJson = convertToDataJson(data);
+        return String.format(
+                "{ \"metadata\": { \"generatedAt\": \"%s\", \"tool\": \"Code Panopticon 1.0\", \"description\": \"Forensic code analysis report\" }, "
+                        +
+                        "\"schema\": { " +
+                        "\"verdict\": \"Diagnostic label (e.g., GOD_CLASS, SHOTGUN_SURGERY). The main 'diagnosis' for the file.\", "
+                        +
+                        "\"riskScore\": \"0-100+ score. High values (>20) indicate critical refactoring targets combining complexity and churn.\", "
+                        +
+                        "\"churn\": \"Total number of Git commits touching this file. High churn = high maintenance effort.\", "
+                        +
+                        "\"lcom4\": \"Lack of Cohesion of Methods. 1=Good (Single Responsibility). >1 means class should be split.\", "
+                        +
+                        "\"maxCC\": \"Maximum Cyclomatic Complexity of a single method. >10 is complex, >20 is very hard to test.\", "
+                        +
+                        "\"coupled\": \"Number of other files that frequently change together with this one (Temporal Coupling).\", "
+                        +
+                        "\"isKnowledgeIsland\": \"True if the file is owned by a single developer who is inactive (Bus Factor Risk).\", "
+                        +
+                        "\"brainMethods\": \"List of overly complex methods that should be refactored first.\", " +
+                        "\"testabilityScore\": \"0-100 score estimating how hard the file is to unit test.\" " +
+                        "}, \"files\": %s }",
+                java.time.Instant.now().toString(), filesJson);
+    }
+
     private String dataToJson(AnalysisData d) {
         return String.format(
                 "{ \"x\": %d, \"y\": %.2f, \"r\": %.2f, \"label\": \"%s\", \"cohesion\": %.2f, \"maxCC\": %.2f, \"coupled\": %d, "

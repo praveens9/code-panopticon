@@ -344,7 +344,7 @@ public class PolyglotApp {
 
         // Generate JSON for AI/Tools
         Path jsonPath = args.outputDir().resolve("panopticon-data.json");
-        String jsonOutput = new JsonDataConverter().convertToDataJson(reportData);
+        String jsonOutput = new JsonDataConverter().convertToSelfDescribingJson(reportData);
         Files.writeString(jsonPath, jsonOutput);
         System.out.println("JSON Report generated at: " + jsonPath);
 
