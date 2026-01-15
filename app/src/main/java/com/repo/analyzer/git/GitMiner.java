@@ -148,9 +148,11 @@ public class GitMiner {
                     .min()
                     .orElse(999);
 
-            // Detect knowledge island: >80% by one author who is inactive
+            // Detect knowledge island: >80% by one author who is inactive (and author is
+            // KNOWN)
             boolean isKnowledgeIsland = primaryPercentage > KNOWLEDGE_ISLAND_THRESHOLD_PERCENTAGE
-                    && daysSincePrimary > KNOWLEDGE_ISLAND_INACTIVE_DAYS;
+                    && daysSincePrimary > KNOWLEDGE_ISLAND_INACTIVE_DAYS
+                    && isKnownAuthor(primaryAuthor);
 
             // Detect coordination bottleneck: many recent authors on high-churn file
             long recentAuthorsCount = contributors.stream()
@@ -179,6 +181,14 @@ public class GitMiner {
             // If git blame fails, return empty
             return SocialForensics.empty();
         }
+    }
+
+    private boolean isKnownAuthor(String author) {
+        if (author == null || author.trim().isEmpty()) {
+            return false;
+        }
+        String lower = author.trim().toLowerCase();
+        return !lower.equals("unknown") && !lower.equals("null") && !lower.equals("undefined");
     }
 
     private List<CommitTransaction> parseGitLogWithTimestamps(Path repoRoot) throws IOException {
@@ -213,6 +223,11 @@ public class GitMiner {
                     String[] parts = line.substring(3).split("###");
                     currentTimestamp = Long.parseLong(parts[0]);
                     currentAuthor = parts.length > 1 ? parts[1] : "";
+
+                    if (transactions.size() % 1000 == 0 && transactions.size() > 0) {
+                        System.out.print("\r> mining history... " + transactions.size() + " commits parsed");
+                        System.out.flush();
+                    }
                 } else if (isSourceFile(line)) {
                     currentCommit.add(line);
                 }
@@ -221,6 +236,7 @@ public class GitMiner {
             if (!currentCommit.isEmpty()) {
                 transactions.add(new CommitTransaction(currentCommit, currentTimestamp, currentAuthor));
             }
+            System.out.println("Parsed " + transactions.size() + " commits.");
         }
 
         return transactions;
@@ -289,6 +305,7 @@ public class GitMiner {
                 .filter(f -> churnMap.get(f) >= MIN_SHARED_COMMITS)
                 .collect(Collectors.toSet());
 
+        int processedCount = 0;
         for (String targetFile : significantFiles) {
             Map<String, Integer> pairCounts = new HashMap<>();
             int targetCommits = churnMap.get(targetFile);
@@ -321,7 +338,16 @@ public class GitMiner {
             if (!coupledPeers.isEmpty()) {
                 couplingResult.put(targetFile, coupledPeers);
             }
+
+            // Progress update for coupling analysis
+            processedCount++;
+            if (processedCount % 50 == 0 || processedCount == significantFiles.size()) {
+                System.out.print(
+                        "\r> analyzed coupling for " + processedCount + "/" + significantFiles.size() + " files...");
+                System.out.flush();
+            }
         }
+        System.out.println(); // Newline after progress
         return couplingResult;
     }
 

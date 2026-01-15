@@ -12,8 +12,6 @@ import com.repo.analyzer.report.JsonDataConverter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
 import com.repo.analyzer.testability.TestabilityAnalyzer;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -124,16 +122,8 @@ public class PolyglotApp {
         System.out.println("Cloning to: " + tempDir);
 
         ProcessBuilder pb = new ProcessBuilder("git", "clone", "--depth", "100", url, tempDir.toString());
-        pb.redirectErrorStream(true);
+        pb.inheritIO(); // Show git progress directly in console
         Process process = pb.start();
-
-        // Print clone progress
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println("  " + line);
-            }
-        }
 
         boolean finished = process.waitFor(300, TimeUnit.SECONDS); // 5 min timeout
         if (!finished || process.exitValue() != 0) {
@@ -229,8 +219,11 @@ public class PolyglotApp {
 
         int analyzed = 0;
         int skipped = 0;
+        int processed = 0;
+        int totalFiles = filesToAnalyze.size();
 
         for (String relativePath : filesToAnalyze) {
+            processed++;
             // Skip test files
             if (relativePath.contains("/test/") || relativePath.contains("Test.")) {
                 skipped++;
@@ -326,7 +319,14 @@ public class PolyglotApp {
                     verdict));
 
             analyzed++;
+
+            // Progress update
+            if (processed % 50 == 0 || processed == totalFiles) {
+                System.out.print("\r> analyzing structure... " + processed + "/" + totalFiles + " files processed");
+                System.out.flush();
+            }
         }
+        System.out.println(); // Newline after progress
 
         System.out.printf("%nAnalyzed: %d files | Skipped: %d test files%n", analyzed, skipped);
 

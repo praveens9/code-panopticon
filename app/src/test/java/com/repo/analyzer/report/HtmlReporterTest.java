@@ -29,9 +29,9 @@ class HtmlReporterTest {
         String json = reporter.convertToJson(List.of(data));
 
         // precise assertions on key fields
-        assertTrue(json.contains("verdict: 'OK'"), "JSON should contain verdict");
-        assertTrue(json.contains("label: 'backend/utils.py'"), "JSON should contain label");
-        assertTrue(json.contains("riskScore: 5.00"), "JSON should contain riskScore");
+        assertTrue(json.contains("\"verdict\": \"OK\""), "JSON should contain verdict");
+        assertTrue(json.contains("\"label\": \"backend/utils.py\""), "JSON should contain label");
+        assertTrue(json.contains("\"riskScore\": 5.00"), "JSON should contain riskScore");
     }
 
     @Test

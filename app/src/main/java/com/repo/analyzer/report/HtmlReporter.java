@@ -1006,8 +1006,18 @@ public class HtmlReporter {
                 const g = svg.append('g');
                 const zoomBehavior = d3.zoom()
                     .extent([[0, 0], [width, height]])
-                    .scaleExtent([0.1, 4])
-                    .on('zoom', (event) => g.attr('transform', event.transform));
+                    .scaleExtent([0.1, 6])
+                    .on('zoom', (event) => {
+                         g.attr('transform', event.transform);
+                         // Semantic Zoom: Show more labels as we zoom in
+                         const k = event.transform.k;
+                         d3.selectAll('.node-label').transition().duration(200).style('opacity', d => {
+                             if (d.pinned || d.riskScore >= 20) return 1; // Always show pinned or high risk
+                             if (k > 2.5) return 1; // Show all at high zoom
+                             if (k > 1.2 && d.riskScore >= 10) return 1; // Show medium risk at slight zoom
+                             return 0; // Hide low risk when zoomed out
+                         });
+                    });
 
                 svg.call(zoomBehavior)
                     .on('click', (event) => {
@@ -1020,10 +1030,10 @@ public class HtmlReporter {
                                 });
 
                             const simulation = d3.forceSimulation(networkData.nodes)
-                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
-                                .force('charge', d3.forceManyBody().strength(-300))
+                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(150))
+                                .force('charge', d3.forceManyBody().strength(-800))
                                 .force('center', d3.forceCenter(width / 2, height / 2))
-                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
+                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 3 + 15).iterations(2));
 
                             const link = g.append('g')
                                 .attr('class', 'links')
@@ -1211,7 +1221,7 @@ public class HtmlReporter {
                                 .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2);
                         });
 
-                    // Add text label - ALL labels visible
+                    // Add text label - Smart visibility
                     nodeGroup.append('text')
                         .text(d => {
                             const parts = d.name.split('/');
@@ -1223,7 +1233,8 @@ public class HtmlReporter {
                         .style('font-size', d => Math.max(9, Math.sqrt(d.riskScore) + 6) + 'px') // Dynamic font size
                         .style('font-weight', 'bold')
                         .style('fill', '#2c3e50') // Corrected property
-                        .style('opacity', 1) // Force 100% visibility
+                        // Default hidden unless high risk
+                        .style('opacity', d => d.riskScore >= 20 ? 1 : 0)
                         .style('pointer-events', 'none')
                         .style('paint-order', 'stroke')
                         .style('stroke', 'rgba(255,255,255,0.95)')
@@ -1363,11 +1374,65 @@ public class HtmlReporter {
                         }
 
                         // 5. Check GOD Class
-                         if (d.y > 100 && d.lcom4 > 2) { // d.y is Total CC
+                         if (d.verdict.includes('GOD_CLASS') || (d.y > 100 && d.lcom4 > 2)) {
                             steps.push({
                                 icon: '⛪',
                                 title: 'Decompose God Class',
-                                desc: `This class is too big and complex. Stop adding features here. Refactor strictly.`
+                                desc: `This class is too big and complex (Verdict: ${d.verdict}). Stop adding features here. Refactor strictly.`
+                            });
+                        }
+
+                        // 6. Check High Static Coupling (Fan-Out)
+                        if (d.fanOut > 30 || d.verdict === 'HIGH_COUPLING' || d.verdict === 'FRAGILE_HUB') {
+                             steps.push({
+                                icon: '🕸️',
+                                title: 'Detach Dependencies',
+                                desc: `Fan-Out is ${d.fanOut.toFixed(0)}. Use Dependency Injection or Facades to decouple.`
+                            });
+                        }
+
+                        // 7. Check Knowledge Island
+                        if (d.isKnowledgeIsland || d.verdict === 'KNOWLEDGE_ISLAND') {
+                            steps.push({
+                                icon: '🏝️',
+                                title: 'Knowledge Transfer',
+                                desc: `Bus Factor = 1. Schedule code walkthroughs with the primary author (${d.primaryAuthor}) immediately.`
+                            });
+                        }
+
+                        // 8. Check Untested Hotspot
+                        if (d.verdict === 'UNTESTED_HOTSPOT') {
+                            steps.push({
+                                icon: '🛡️',
+                                title: 'Add Safety Net',
+                                desc: 'High risk code with NO tests. Write characterization tests before touching this code.'
+                            });
+                        }
+
+                        // 9. Check Hidden Dependency
+                        if (d.verdict === 'HIDDEN_DEPENDENCY') {
+                            steps.push({
+                                icon: '👻',
+                                title: 'Expose Dependencies',
+                                desc: `Code changes with ${d.coupled} other files but lacks imports. Make these dependencies explicit.`
+                            });
+                        }
+
+                        // 10. Check Complexity (MaxCC)
+                        if (d.verdict.startsWith('COMPLEX') || d.maxCC > 15) {
+                            steps.push({
+                                icon: '🌀',
+                                title: 'Reduce Cyclomatic Complexity',
+                                desc: `Max CC is ${d.maxCC}. Simplify conditional logic and extract methods.`
+                            });
+                        }
+
+                        // 11. Check Bloated
+                        if (d.verdict === 'BLOATED') {
+                            steps.push({
+                                icon: '🐡',
+                                title: 'Decompose Large File',
+                                desc: `File has ${d.loc} LOC. Split responsibilities into smaller files.`
                             });
                         }
 
