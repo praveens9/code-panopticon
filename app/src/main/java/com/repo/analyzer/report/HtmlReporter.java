@@ -188,6 +188,8 @@ public class HtmlReporter {
                     #detailsPanel.active { display: flex !important; }
                     .panel-header { border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px; }
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
+                    code { word-wrap: break-word; white-space: pre-wrap; word-break: break-all; }
+                    .break-all { word-break: break-all; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
 
                     /* Verdict Colors - Modern Pastel Palette */
@@ -291,6 +293,14 @@ public class HtmlReporter {
                                                             <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
                                                             <option value="BRAIN_METHOD">BRAIN_METHOD</option>
                                                             <option value="GOD_CLASS">GOD_CLASS</option>
+                                                            <option value="KNOWLEDGE_ISLAND">KNOWLEDGE_ISLAND</option>
+                                                            <option value="UNTESTED_HOTSPOT">UNTESTED_HOTSPOT</option>
+                                                            <option value="SPLIT_CANDIDATE">SPLIT_CANDIDATE</option>
+                                                            <option value="HIDDEN_DEPENDENCY">HIDDEN_DEPENDENCY</option>
+                                                            <option value="HIGH_COUPLING">HIGH_COUPLING</option>
+                                                            <option value="COMPLEX (Low Risk)">COMPLEX (Low Risk)</option>
+                                                            <option value="BLOATED">BLOATED</option>
+                                                            <option value="FRAGILE_HUB">FRAGILE_HUB</option>
                                                         </select>
                                                     </div>
                                                     <table id="dataTable">
@@ -1254,6 +1264,8 @@ public class HtmlReporter {
                     function diagnose(d) {
                         // Core verdicts from ForensicRuleEngine
                         if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic into a single module" };
+                        if (d.verdict === 'KNOWLEDGE_ISLAND') return { title: "🏝️ Knowledge Island", desc: "Single Active Maintainer", why: "Bus Factor = 1. High dependency on one author.", fix: "Pair programming, code walkthroughs, and having others touch this file." };
+                        if (d.verdict === 'UNTESTED_HOTSPOT') return { title: "🔥 Untested Hotspot", desc: "High Risk + No Tests", why: "High Churn & Complexity with 0 tests.", fix: "Write characterization tests BEFORE making any changes." };
                         if (d.verdict === 'HIDDEN_DEPENDENCY') return { title: "Hidden Dependency", desc: "Temporal coupling without code link", why: `Changes with ${d.coupled} files but only ${d.fanOut} imports`, fix: "Make dependencies explicit via imports or extract shared logic" };
                         if (d.verdict.startsWith('GOD_CLASS')) return { title: "God Class", desc: "Too many responsibilities", why: `Total CC ${d.y}, Fan-out ${d.fanOut}`, fix: "Full decomposition required" };
                         if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split the class by responsibility" };
@@ -1421,7 +1433,7 @@ public class HtmlReporter {
                                 <div style="background: #fff5f5; border-left: 4px solid #e74c3c; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
                                     <h3 style="margin: 0 0 10px 0; color: #e74c3c;">🚨 Knowledge Island</h3>
                                     <p style="margin: 0; color: #34495e;"><strong>STOP:</strong> Do not refactor without knowledge transfer first.</p>
-                                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #7f8c8d;">This file is owned by a single expert (${d.primaryAuthor || 'unknown'}) who may no longer be actively contributing. Schedule a code walkthrough before making changes.</p>
+                                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #7f8c8d; word-break: break-all;">This file is owned by a single expert (${d.primaryAuthor || 'unknown'}) who may no longer be actively contributing. Schedule a code walkthrough before making changes.</p>
                                 </div>
                             `;
                         }
@@ -1464,6 +1476,58 @@ public class HtmlReporter {
                             `;
                         }
 
+                        // Refactoring Workflow (Phase 3)
+                        let refactoringSection = '';
+                        if (d.lcom4Blocks && d.lcom4Blocks.length > 1) {
+                            // Sort blocks by size (smallest first)
+                            const clusters = [...d.lcom4Blocks].sort((a, b) => a.length - b.length);
+
+                            // Generate steps
+                            const steps = clusters.map((members, index) => {
+                                // If it's the last (largest) cluster, it's the survivor
+                                if (index === clusters.length - 1) {
+                                    return {
+                                        icon: '🏁',
+                                        action: 'Rename Source Class',
+                                        desc: `Remaining ${members.length} members form the core responsibility.`,
+                                        members: members
+                                    };
+                                }
+
+                                return {
+                                    icon: '✂️',
+                                    action: `Extract Class ${index + 1}`,
+                                    desc: `Move ${members.length} members to a new class.`,
+                                    members: members
+                                };
+                            });
+
+                            refactoringSection = `
+                                <div style="background: #fdf2e9; border: 1px solid #f6ddcc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #d35400; display: flex; align-items: center; gap: 8px;">
+                                        <span>🏗️</span> Refactoring Recipe
+                                    </h3>
+                                    <p style="font-size: 0.85rem; color: #e67e22; margin-bottom: 15px; line-height: 1.4;">
+                                        This class has <strong>${clusters.length} independent clusters</strong>. Here is a plan to split it:
+                                    </p>
+                                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                                        ${steps.map((step, i) => `
+                                            <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid ${i === steps.length - 1 ? '#27ae60' : '#e67e22'}; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                                    <span style="font-size: 1.2rem;">${step.icon}</span>
+                                                    <strong style="font-size: 0.9rem; color: #34495e;">${step.action}</strong>
+                                                </div>
+                                                <div style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 6px;">${step.desc}</div>
+                                                <div class="break-all" style="font-size: 0.75rem; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; border: 1px solid #eee; color: #555;">
+                                                    <code>${step.members.slice(0, 3).join(', ')}${step.members.length > 3 ? ', ...' : ''}</code>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+
                         content.innerHTML = `
                             <div class="panel-header">
                                 <h2>${d.label}</h2>
@@ -1473,6 +1537,7 @@ public class HtmlReporter {
                             ${socialSection}
                             ${testabilitySection}
                             ${islandWarning}
+                            ${refactoringSection}
 
                             <!-- Action Plan Section -->
                             <div class="action-plan" style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
