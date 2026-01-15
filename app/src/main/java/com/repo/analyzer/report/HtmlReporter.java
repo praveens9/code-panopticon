@@ -13,7 +13,7 @@ public class HtmlReporter {
         String treemapJson = convertToHierarchyJson(data);
         String networkJson = convertToNetworkJson(data);
 
-        String html = TEMPLATE
+        String html = new StringBuilder(TEMPLATE_HEAD).append(TEMPLATE_BODY).toString()
                 .replace("{{DATA_PLACEHOLDER}}", json)
                 .replace("{{TREEMAP_DATA}}", treemapJson)
                 .replace("{{NETWORK_DATA}}", networkJson);
@@ -185,7 +185,7 @@ public class HtmlReporter {
         return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
     }
 
-    private static final String TEMPLATE = """
+    private static final String TEMPLATE_HEAD = """
             <!DOCTYPE html>
             <html>
             <head>
@@ -213,31 +213,112 @@ public class HtmlReporter {
                     .chart-container { position: relative; height: 60vh; width: 100%; }
 
                     /* System Map (Circle Packing) */
-                    #treemap { width: 100%; height: 75vh; display: block; background: white; }
-                    .node { cursor: pointer; }
-                    .node:hover { stroke: #333; stroke-width: 2px; }
-                    /* .node--leaf removed to prevent color override */
+                    #treemap { width: 100%; height: 75vh; display: block; background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%); border-radius: 12px; }
+                    .node { cursor: pointer; transition: all 0.2s ease; }
+                    .node:hover { stroke-width: 3px !important; }
+                    .node--leaf { transition: all 0.2s ease; }
+                    .node--leaf:hover { filter: drop-shadow(0 0 8px currentColor) brightness(1.1); }
                     .label { font: 11px "Helvetica Neue", Helvetica, Arial, sans-serif; text-anchor: middle; text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff; pointer-events: none; fill: #2c3e50; font-weight: bold; }
                     .label, .node--root { pointer-events: none; }
-                    #breadcrumbs { font-size: 1.1rem; padding: 10px 0; border-bottom: 1px solid #eee; margin-bottom: 10px; display: flex; align-items: center; }
-                    .crumb { cursor: pointer; color: #3498db; padding: 4px 8px; border-radius: 4px; transition: background 0.2s; }
-                    .crumb:hover { background: #eaf2f8; text-decoration: none; }
-                    .crumb:last-child { color: #2c3e50; cursor: default; font-weight: bold; background: none; }
-                    .crumb-separator { color: #999; margin: 0 5px; }
+
+                    /* Wayfinding Breadcrumb Bar */
+                    #breadcrumbs {
+                        font-size: 0.95rem;
+                        padding: 10px 16px;
+                        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                        border-radius: 24px;
+                        margin-bottom: 12px;
+                        display: inline-flex;
+                        align-items: center;
+                        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+                    }
+                    .crumb {
+                        cursor: pointer;
+                        color: rgba(255,255,255,0.85);
+                        padding: 4px 10px;
+                        border-radius: 12px;
+                        transition: all 0.2s ease;
+                        font-weight: 500;
+                    }
+                    .crumb:hover { background: rgba(255,255,255,0.2); color: #fff; }
+                    .crumb:last-child { color: #fff; cursor: default; font-weight: 700; background: rgba(255,255,255,0.15); }
+                    .crumb-separator { color: rgba(255,255,255,0.5); margin: 0 2px; font-size: 0.8rem; }
+
+                    /* Virtual Lens Tooltip */
+                    .virtual-lens {
+                        position: fixed;
+                        background: rgba(20, 20, 30, 0.92);
+                        backdrop-filter: blur(12px);
+                        -webkit-backdrop-filter: blur(12px);
+                        border: 1px solid rgba(255,255,255,0.1);
+                        border-radius: 12px;
+                        padding: 14px 18px;
+                        color: #fff;
+                        font-size: 13px;
+                        pointer-events: none;
+                        z-index: 1000;
+                        box-shadow: 0 10px 40px rgba(0,0,0,0.4), 0 0 0 1px rgba(255,255,255,0.05) inset;
+                        max-width: 300px;
+                        opacity: 0;
+                        transition: opacity 0.15s ease;
+                    }
+                    .virtual-lens .lens-title {
+                        font-size: 14px;
+                        font-weight: 700;
+                        margin-bottom: 10px;
+                        padding-bottom: 8px;
+                        border-bottom: 1px solid rgba(255,255,255,0.1);
+                        word-break: break-word;
+                    }
+                    .virtual-lens .lens-metrics {
+                        display: grid;
+                        grid-template-columns: repeat(3, 1fr);
+                        gap: 8px;
+                        margin-bottom: 10px;
+                    }
+                    .virtual-lens .lens-metric {
+                        text-align: center;
+                        background: rgba(255,255,255,0.05);
+                        padding: 6px 4px;
+                        border-radius: 6px;
+                    }
+                    .virtual-lens .lens-metric-value {
+                        font-size: 16px;
+                        font-weight: 700;
+                        display: block;
+                    }
+                    .virtual-lens .lens-metric-label {
+                        font-size: 10px;
+                        color: rgba(255,255,255,0.6);
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
+                    .virtual-lens .lens-verdict {
+                        display: inline-block;
+                        padding: 4px 10px;
+                        border-radius: 6px;
+                        font-size: 11px;
+                        font-weight: 700;
+                        text-transform: uppercase;
+                        letter-spacing: 0.5px;
+                    }
 
                     /* Network Graph */
                     #network-container { width: 100%; height: 60vh; overflow: auto; position: relative; border: 1px solid #ddd; border-radius: 4px; background: #fafafa; }
                     #network { display: block; }
-                    .node { cursor: pointer; stroke: #fff; stroke-width: 2px; }
-                    .node:hover { stroke: #000; stroke-width: 3px; }
                     .link { stroke: #999; stroke-opacity: 0.6; stroke-width: 1px; }
 
-                    /* DataTable */
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+
+                    /* DataTable - Scrollable with Sticky Header */
+                    #table-tab { max-height: 70vh; overflow-y: auto; }
+                    table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+                    th { resize: horizontal; overflow: auto; min-width: 80px; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-                    th { background: #34495e; color: white; cursor: pointer; user-select: none; }
+                    th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
                     th:hover { background: #2c3e50; }
                     tr:hover { background: #f5f5f5; cursor: pointer; }
+                    td:first-child { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+                    td:first-child:hover { overflow: visible; white-space: normal; word-break: break-all; background: #fff; position: relative; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
                     .filter-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
                     .filter-row input, .filter-row select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
 
@@ -258,20 +339,21 @@ public class HtmlReporter {
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
 
-                    /* Verdict Colors */
-                    .verdict-TOTAL_MESS { background-color: #c0392b; }
-                    .verdict-SHOTGUN_SURGERY { background-color: #d35400; }
-                    .verdict-BRAIN_METHOD { background-color: #8e44ad; }
-                    .verdict-GOD_CLASS { background-color: #2c3e50; }
-                    .verdict-HIDDEN_DEPENDENCY { background-color: #e67e22; }
-                    .verdict-HIGH_COUPLING { background-color: #f39c12; }
-                    .verdict-COMPLEX { background-color: #f1c40f; color: #333; }
-                    .verdict-SPLIT_CANDIDATE { background-color: #9b59b6; }
-                    .verdict-BLOATED { background-color: #e74c3c; }
-                    .verdict-DATA_CLASS { background-color: #3498db; }
-                    .verdict-CONFIGURATION { background-color: #6c5ce7; }
-                    .verdict-ORCHESTRATOR { background-color: #1abc9c; }
-                    .verdict-OK { background-color: #27ae60; }
+                    /* Verdict Colors - Modern Pastel Palette */
+                    .verdict-TOTAL_MESS { background-color: #ff7675; }
+                    .verdict-SHOTGUN_SURGERY { background-color: #e17055; }
+                    .verdict-BRAIN_METHOD { background-color: #a29bfe; }
+                    .verdict-GOD_CLASS { background-color: #636e72; }
+                    .verdict-HIDDEN_DEPENDENCY { background-color: #fdcb6e; color: #2d3436; }
+                    .verdict-HIGH_COUPLING { background-color: #ffeaa7; color: #2d3436; }
+                    .verdict-COMPLEX { background-color: #fab1a0; color: #2d3436; }
+                    .verdict-SPLIT_CANDIDATE { background-color: #d63031; }
+                    .verdict-FRAGILE_HUB { background-color: #e17055; }
+                    .verdict-BLOATED { background-color: #ff7675; }
+                    .verdict-DATA_CLASS { background-color: #74b9ff; }
+                    .verdict-CONFIGURATION { background-color: #a29bfe; }
+                    .verdict-ORCHESTRATOR { background-color: #81ecec; color: #2d3436; }
+                    .verdict-OK { background-color: #00b894; }
 
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
                     .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
@@ -287,572 +369,954 @@ public class HtmlReporter {
                     .tips h4 { margin: 0 0 5px 0; color: #f39c12; font-size: 0.9rem; }
 
                     .close-btn { align-self: flex-end; cursor: pointer; color: #999; font-size: 1.5rem; line-height: 1; border: none; background: none; }
-                    .close-btn:hover { color: #333; }
+                    .close-btn:hover { color: #555; }
+
+                    /* System Map HUD - Fixed Hover Inspector */
+                    #system-map-hud {
+                        position: absolute;
+                        bottom: 20px;
+                        left: 20px;
+                        width: 300px;
+                        background: rgba(255, 255, 255, 0.95);
+                        border: 1px solid #e0e0e0;
+                        border-radius: 8px;
+                        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+                        padding: 15px;
+                        z-index: 1000;
+                        backdrop-filter: blur(5px);
+                        display: none; /* Hidden by default */
+                        transition: opacity 0.2s ease;
+                    }
+                    #system-map-hud h3 { margin: 0 0 10px 0; font-size: 14px; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+                    .hud-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; }
+                    .hud-label { color: #7f8c8d; }
+                    .hud-value { font-weight: 600; color: #2d3436; }
+                    .hud-verdict { margin-top: 10px; padding: 4px 8px; border-radius: 4px; text-align: center; font-weight: bold; font-size: 11px; color: #fff; }
 
                     .legend { display: flex; gap: 20px; margin-top: 15px; flex-wrap: wrap; }
                     .legend-item { display: flex; align-items: center; gap: 5px; font-size: 0.9rem; }
                     .legend-color { width: 20px; height: 20px; border-radius: 3px; }
                 </style>
             </head>
-            <body>
-                <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
-                    <div class="main-content">
-                        <div class="container">
-                            <h1>Code Forensics: Risk Analysis</h1>
+            """;
 
-                            <div class="tabs">
-                                <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
-                                <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                <button class="tab" onclick="switchTab('network')">Network</button>
-                            </div>
+    private static String TEMPLATE_BODY_PART1 = """
+                                <body>
+                                    <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
+                                        <div class="main-content">
+                                            <div class="container">
+                                                <h1>Code Forensics: Risk Analysis</h1>
 
-                            <!-- Quadrant Tab -->
-                            <div id="quadrant-tab" class="tab-content active">
-                                <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
-                                <div class="chart-container">
-                                    <canvas id="riskChart"></canvas>
-                                </div>
-                                <div class="legend">
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
-                                    <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
-                                </div>
-                            </div>
+                                                <div class="tabs">
+                                                    <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
+                                                    <button class="tab" onclick="switchTab('table')">Data Table</button>
+                                                    <button class="tab" onclick="switchTab('treemap')">System Map</button>
+                                                    <button class="tab" onclick="switchTab('network')">Network</button>
+                                                </div>
 
-                            <!-- Table Tab -->
-                            <div id="table-tab" class="tab-content">
-                                <div class="filter-row">
-                                    <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
-                                    <select id="verdictFilter">
-                                        <option value="">All Verdicts</option>
-                                        <option value="TOTAL_MESS">TOTAL_MESS</option>
-                                        <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
-                                        <option value="BRAIN_METHOD">BRAIN_METHOD</option>
-                                        <option value="GOD_CLASS">GOD_CLASS</option>
-                                    </select>
-                                </div>
-                                <table id="dataTable">
-                                    <thead>
-                                        <tr>
-                                            <th onclick="sortTable(0)">Class Name ▼</th>
-                                            <th onclick="sortTable(1)">Churn ▼</th>
-                                            <th onclick="sortTable(2)">Recent Churn ▼</th>
-                                            <th onclick="sortTable(3)">Risk Score ▼</th>
-                                            <th onclick="sortTable(4)">Complexity ▼</th>
-                                            <th onclick="sortTable(5)">LCOM4 ▼</th>
-                                            <th onclick="sortTable(6)">Verdict ▼</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tableBody"></tbody>
-                                </table>
-                            </div>
+                                                <!-- Quadrant Tab -->
+                                                <div id="quadrant-tab" class="tab-content active">
+                                                    <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
+                                                    <div class="chart-container">
+                                                        <canvas id="riskChart"></canvas>
+                                                    </div>
+                                                    <div class="legend">
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
+                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
+                                                    </div>
+                                                </div>
 
-                            <!-- System Map Tab -->
-                            <!-- System Map Tab -->
-                            <div id="treemap-tab" class="tab-content">
-                                <div id="breadcrumbs"><span class="crumb">root</span></div>
-                                <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
-                                    <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
-                                </div>
-                                <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
-                                    👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
-                                </div>
-                                <svg id="treemap"></svg>
-                            </div>
+                                                <!-- Table Tab -->
+                                                <div id="table-tab" class="tab-content">
+                                                    <div class="filter-row">
+                                                        <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
+                                                        <select id="verdictFilter">
+                                                            <option value="">All Verdicts</option>
+                                                            <option value="TOTAL_MESS">TOTAL_MESS</option>
+                                                            <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
+                                                            <option value="BRAIN_METHOD">BRAIN_METHOD</option>
+                                                            <option value="GOD_CLASS">GOD_CLASS</option>
+                                                        </select>
+                                                    </div>
+                                                    <table id="dataTable">
+                                                        <thead>
+                                                            <tr>
+                                                                <th onclick="sortTable(0)">Class Name ▼</th>
+                                                                <th onclick="sortTable(1)">Churn ▼</th>
+                                                                <th onclick="sortTable(2)">Recent Churn ▼</th>
+                                                                <th onclick="sortTable(3)">Risk Score ▼</th>
+                                                                <th onclick="sortTable(4)">Complexity ▼</th>
+                                                                <th onclick="sortTable(5)">LCOM4 ▼</th>
+                                                                <th onclick="sortTable(6)">Verdict ▼</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="tableBody"></tbody>
+                                                    </table>
+                                                </div>
 
-                            <!-- Network Tab -->
-                            <div id="network-tab" class="tab-content">
-                                <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
-                                <div id="network-container">
-                                    <svg id="network"></svg>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                                                <!-- System Map Tab -->
+                                                <div id="treemap-tab" class="tab-content">
+                                                    <div class="row">
+                                                        <div class="col-md-12">
+                                                            <div class="card">
+                                                                <div class="card-header">
+                                                                    <div class="breadcrumbs" id="breadcrumbs">
+                                                                        <span class="crumb active">root</span>
+                                                                    </div>
+                                                                </div>
+                                                                <div class="card-body">
+                                                                    <div id="treemap-container">
+                                                                        <div id="loading">Loading visualization...</div>
+                                                                        <svg id="treemap"></svg>
+                                                                        <div id="system-map-hud">
+                                                                            <!-- HUD Content populated by JS -->
+                                                                            <h3>Hover over a file</h3>
+                                                                            <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                    <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                                        <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                                    </div>
+                                                    <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                                        👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                                    </div>
+                                                </div>
 
-                    <div id="detailsPanel">
-                        <button class="close-btn" onclick="hideDetails()">&times;</button>
-                        <div id="panelContent"></div>
-                    </div>
-                </div>
+                                                <!-- Network Tab -->
+                                                <div id="network-tab" class="tab-content">
+                                                    <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
+                                                    <div id="network-container">
+                                                        <svg id="network"></svg>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
 
-                <script>
-                    const rawData = {{DATA_PLACEHOLDER}};
-                    const treemapData = {{TREEMAP_DATA}};
-                    const networkData = {{NETWORK_DATA}};
-                    let currentSort = { column: 3, ascending: false };
+                                        <div id="detailsPanel">
+                                            <button class="close-btn" onclick="hideDetails()">&times;</button>
+                                            <div id="panelContent"></div>
+                                        </div>
+                                    </div>
 
-                    // Tab switching
-                    function switchTab(tabName) {
-                        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                        document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                                    <script>
+                                        const rawData = {{DATA_PLACEHOLDER}};
+                                        const treemapData = {{TREEMAP_DATA}};
+                                        const networkData = {{NETWORK_DATA}};
+                                        let currentSort = { column: 3, ascending: false };
 
-                        event.target.classList.add('active');
-                        document.getElementById(tabName + '-tab').classList.add('active');
+                                        // Fix: Hide loading overlay immediately as data is embedded
+                                        try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
 
-                        if (tabName === 'table') renderTable();
-                        if (tabName === 'treemap') renderTreemap();
-                        if (tabName === 'network') renderNetwork();
-                    }
+                                        // Tab switching
+                                        function switchTab(tabName) {
+                                            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                                            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-                    const getColor = (riskScore) => {
-                        // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
-                        if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
-                        if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
-                        return 'rgba(46, 204, 113, 0.7)'; // Green
-                    };
+                                            event.target.classList.add('active');
+                                            document.getElementById(tabName + '-tab').classList.add('active');
 
-                    const getRiskColor = (d) => {
-                        // Use Verdict for explicit coloring if available
-                        const v = d.verdict;
-                        if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
-                        if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
-
-                        // Fallback to numeric risk score
-                        const score = d.riskScore || 0;
-                        if (score > 20) return '#e74c3c';
-                        if (score > 5) return '#f39c12';
-                        return '#27ae60'; // Green
-                    };
-
-                    // Quadrant Chart (existing code)
-                    const ctx = document.getElementById('riskChart').getContext('2d');
-                    const backgroundZones = {
-                        id: 'backgroundZones',
-                        beforeDraw: (chart) => {
-                            const ctx = chart.ctx;
-                            const chartArea = chart.chartArea;
-                            const xScale = chart.scales.x;
-                            const yScale = chart.scales.y;
-                            const xMid = xScale.getPixelForValue(10);
-                            const yMid = yScale.getPixelForValue(50);
-                            ctx.save();
-                            ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
-                            ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
-                            ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
-                            ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
-                            ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
-                            ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
-                            ctx.restore();
-                        }
-                    };
-
-                    const chart = new Chart(ctx, {
-                        type: 'bubble',
-                        data: {
-                            datasets: [{
-                                label: 'Classes',
-                                data: rawData,
-                                backgroundColor: rawData.map(d => getColor(d.riskScore)),
-                                borderColor: rawData.map(d => getColor(d.riskScore).replace('0.7', '1')),
-                                borderWidth: 1
-                            }]
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            onClick: (e) => {
-                                const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
-                                if (points.length) showDetails(rawData[points[0].index]);
-                            },
-                            plugins: {
-                                tooltip: {
-                                    callbacks: {
-                                        label: function(context) {
-                                            const d = context.raw;
-                                            return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
+                                            if (tabName === 'table') renderTable();
+                                            if (tabName === 'treemap') renderTreemap();
+                                            if (tabName === 'network') renderNetwork();
                                         }
-                                    }
-                                },
-                                legend: { display: false },
-                                annotation: {
-                                    annotations: {
-                                        churnLine: { type: 'line', xMin: 10, xMax: 10, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
-                                        complexityLine: { type: 'line', yMin: 50, yMax: 50, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
-                                    }
-                                }
-                            },
-                            scales: {
-                                x: { title: { display: true, text: 'Churn' }, beginAtZero: true },
-                                y: { title: { display: true, text: 'Complexity' }, beginAtZero: true }
-                            }
-                        },
-                        plugins: [backgroundZones]
-                    });
 
-                    // Side Panel Details
-                    function showDetails(d) {
-                        const panel = document.getElementById('detailsPanel');
-                        panel.classList.add('active');
-                        const content = document.getElementById('panelContent');
-                        content.innerHTML = `
-                            <div class="panel-header">
-                                <h2>${d.label}</h2>
-                                <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
-                            </div>
-                            <div class="stat-grid">
-                                <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
-                            </div>
-                            ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
-                            ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
-                            ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
-                            ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
-                            ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
-                            ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
-                            ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
-                            ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
-                            ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
-                            <div class="tips">
-                                <h4>Tips for Improvement:</h4>
-                                <ul>
-                                    <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
-                                    <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
-                                    <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
-                                    <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
-                                </ul>
-                            </div>
-                        `;
-                    }
+                                        const getColor = (riskScore) => {
+                                            // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                                            if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                                            if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                                            return 'rgba(46, 204, 113, 0.7)'; // Green
+                                        };
 
-                    function hideDetails() {
-                        document.getElementById('detailsPanel').classList.remove('active');
-                    }
+                                        const getRiskColor = (d) => {
+                                            // Use Verdict for explicit coloring if available
+                                            const v = d.verdict;
+                                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
 
-                    // Table rendering
-                    function renderTable() {
-                        const tbody = document.getElementById('tableBody');
-                        const classFilter = document.getElementById('classFilter').value.toLowerCase();
-                        const verdictFilter = document.getElementById('verdictFilter').value;
+                                            // Fallback to numeric risk score
+                                            const score = d.riskScore || 0;
+                                            if (score > 20) return '#e74c3c';
+                                            if (score > 5) return '#f39c12';
+                                            return '#27ae60'; // Green
+                                        };
 
-                        let filtered = rawData.filter(d => {
-                            return d.label.toLowerCase().includes(classFilter) && (!verdictFilter || d.verdict === verdictFilter);
-                        });
+                                        // Quadrant Chart with Dynamic Axis Scaling
+                                        const ctx = document.getElementById('riskChart').getContext('2d');
 
-                        filtered.sort((a, b) => {
-                            let aVal, bVal;
-                            switch(currentSort.column) {
-                                case 0: aVal = a.label; bVal = b.label; break;
-                                case 1: aVal = a.churn; bVal = b.churn; break;
-                                case 2: aVal = a.recentChurn; bVal = b.recentChurn; break;
-                                case 3: aVal = a.riskScore; bVal = b.riskScore; break;
-                                case 4: aVal = a.y; bVal = b.y; break;
-                                case 5: aVal = a.lcom4; bVal = b.lcom4; break;
-                                case 6: aVal = a.verdict; bVal = b.verdict; break;
-                            }
-                            if (typeof aVal === 'string') return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
-                            return currentSort.ascending ? aVal - bVal : bVal - aVal;
-                        });
+                                        // Calculate dynamic axis bounds based on data
+                                        const maxChurn = Math.max(...rawData.map(d => d.x), 10);
+                                        const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
+                                        const xAxisMax = Math.ceil(maxChurn * 1.2);
+                                        const yAxisMax = Math.ceil(maxComplexity * 1.1);
 
-                        tbody.innerHTML = filtered.map(d => `
-                            <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                <td>${d.label}</td>
-                                <td>${d.churn}</td>
-                                <td>${d.recentChurn}</td>
-                                <td>${d.riskScore.toFixed(1)}</td>
-                                <td>${d.y.toFixed(0)}</td>
-                                <td>${d.lcom4.toFixed(1)}</td>
-                                <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
-                            </tr>
-                        `).join('');
-                    }
+                                        // Calculate percentile-based dividers (75th percentile)
+                                        const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
+                                        const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
+                                        const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
+                                        const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
 
-                    function sortTable(column) {
-                        if (currentSort.column === column) currentSort.ascending = !currentSort.ascending;
-                        else { currentSort.column = column; currentSort.ascending = false; }
-                        renderTable();
-                    }
-
-                    document.getElementById('classFilter').addEventListener('input', renderTable);
-                    document.getElementById('verdictFilter').addEventListener('change', renderTable);
-
-                    // System Map (Circle Packing) rendering
-                    function renderTreemap() {
-                        // 1. Validate Container & Dimensions
-                        const container = document.getElementById('treemap-tab');
-                        const svgEl = document.getElementById('treemap');
-                        if (!container || !svgEl) {
-                            console.error("Missing container or svg element");
-                            return;
-                        }
-
-                        let width = svgEl.clientWidth;
-                        let height = container.clientHeight - 40;
-
-                        // Robust fallback for hidden/unmounted state
-                        if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
-                        if (!height || height <= 0) height = (window.innerHeight * 0.75) - 40;
-                        if (height < 400) height = 600; // Minimum sensible height
-
-                        // 2. Clear previous
-                        d3.select('#treemap').selectAll('*').remove();
-                        d3.select('#treemap')
-                            .attr('width', width)
-                            .attr('height', height)
-                            .style('cursor', 'pointer');
-
-                        try {
-                            // 3. Data Check
-                            if (!treemapData || !treemapData.children) {
-                                throw new Error("No hierarchical data available");
-                            }
-
-                            // 4. Setup Hierarchy
-                            const root = d3.hierarchy(treemapData)
-                                .sum(d => d.value || 0)
-                                .sort((a, b) => b.value - a.value);
-
-                            let focus = root;
-                            let view;
-
-                            // 5. Layout
-                            const pack = d3.pack()
-                                .size([width, height])
-                                .padding(2);
-
-                            pack(root);
-
-                            // 6. Rendering
-                            const svg = d3.select('#treemap');
-
-                            // Background click handler
-                            svg.on('click', (event) => zoom(event, root));
-
-                            // Circles
-                            const node = svg.append('g')
-                                .selectAll('circle')
-                                .data(root.descendants())
-                                .join('circle')
-                                .attr('class', d => d.children ? 'node' : 'node node--leaf')
-                                .attr('fill', d => {
-                                    if (d.children) return '#ecf0f1';
-                                    try { return getRiskColor(d.data); } catch(e) { return '#bdc3c7'; }
-                                })
-                                .attr('stroke', d => d.children ? '#bdc3c7' : '#fff')
-                                .on('mouseover', function(event, d) { d3.select(this).attr('stroke', '#2c3e50'); })
-                                .on('mouseout', function(event, d) { d3.select(this).attr('stroke', d.children ? '#bdc3c7' : '#fff'); })
-                                .on('click', (event, d) => {
-                                    const isLeaf = !d.children || d.height === 0;
-                                    const isCmdClick = event.metaKey || event.ctrlKey;
-
-                                    if (isLeaf || isCmdClick) {
-                                        event.stopPropagation();
-
-                                        // 1. If it's a leaf, ALWAYS show details (Click or Cmd+Click)
-                                        if (isLeaf) {
-                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
-                                            if (classData) {
-                                                showDetails(classData);
-                                            } else {
-                                                console.warn("Details not found for " + d.data.name);
+                                        const backgroundZones = {
+                                            id: 'backgroundZones',
+                                            beforeDraw: (chart) => {
+                                                const ctx = chart.ctx;
+                                                const chartArea = chart.chartArea;
+                                                const xScale = chart.scales.x;
+                                                const yScale = chart.scales.y;
+                                                const xMid = xScale.getPixelForValue(churnDivider);
+                                                const yMid = yScale.getPixelForValue(complexityDivider);
+                                                ctx.save();
+                                                ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+                                                ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
+                                                ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
+                                                ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
+                                                ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+                                                ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
+                                                ctx.restore();
                                             }
-                                        }
-                                        // 2. If it's a folder AND Cmd+Click, show logic (or ignore)
-                                        else if (isCmdClick) {
-                                            console.log("Folder selected: " + d.data.name + " (No details available)");
+                                        };
+
+                                        const chart = new Chart(ctx, {
+                                            type: 'bubble',
+                                            data: {
+                                                datasets: [{
+                                                    label: 'Classes',
+                                                    data: rawData,
+                                                    backgroundColor: rawData.map(d => getColor(d.riskScore)),
+                                                    borderColor: rawData.map(d => getColor(d.riskScore).replace('0.7', '1')),
+                                                    borderWidth: 1
+                                                }]
+                                            },
+                                            options: {
+                                                responsive: true,
+                                                maintainAspectRatio: false,
+                                                onClick: (e) => {
+                                                    const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                                                    if (points.length) showDetails(rawData[points[0].index]);
+                                                },
+                                                plugins: {
+                                                    tooltip: {
+                                                        callbacks: {
+                                                            label: function(context) {
+                                                                const d = context.raw;
+                                                                return [d.label, `Risk: ${d.riskScore.toFixed(1)}`, `Churn: ${d.churn}`, `CC: ${d.y.toFixed(0)}`];
+                                                            }
+                                                        }
+                                                    },
+                                                    legend: { display: false },
+                                                    annotation: {
+                                                        annotations: {
+                                                            churnLine: { type: 'line', xMin: churnDivider, xMax: churnDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] },
+                                                            complexityLine: { type: 'line', yMin: complexityDivider, yMax: complexityDivider, borderColor: 'rgba(0,0,0,0.3)', borderWidth: 2, borderDash: [5,5] }
+                                                        }
+                                                    }
+                                                },
+                                                scales: {
+                                                    x: { title: { display: true, text: 'Churn' }, min: 0, max: xAxisMax },
+                                                    y: { title: { display: true, text: 'Complexity' }, min: 0, max: yAxisMax }
+                                                }
+                                            },
+                                            plugins: [backgroundZones]
+                                        });
+
+                                        // Side Panel Details
+                                        function showDetails(d) {
+                                            const panel = document.getElementById('detailsPanel');
+                                            panel.classList.add('active');
+                                            const content = document.getElementById('panelContent');
+                                            content.innerHTML = `
+                                                <div class="panel-header">
+                                                    <h2>${d.label}</h2>
+                                                    <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
+                                                </div>
+                                                <div class="stat-grid">
+                                                    <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity (CC)</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled Peers</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.fanOut.toFixed(0)}</span><span class="stat-label">Fan Out</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.afferentCoupling.toFixed(0)}</span><span class="stat-label">Afferent Coupling</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
+                                                    <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                                                </div>
+                                                ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
+                                                ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
+                                                ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                                                ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
+                                                ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
+                                                ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
+                                                ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
+                                                ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
+                                                ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                                                <div class="tips">
+                                                    <h4>Tips for Improvement:</h4>
+                                                    <ul>
+                                                        <li><strong>Refactor:</strong> Break down large methods or classes into smaller, more focused units.</li>
+                                                        <li><strong>Encapsulate:</strong> Group related data and behavior.</li>
+                                                        <li><strong>Reduce Coupling:</strong> Minimize dependencies between classes.</li>
+                                                        <li><strong>Improve Cohesion:</strong> Ensure classes have a single, clear responsibility.</li>
+                                                    </ul>
+                                                </div>
+                                            `;
                                         }
 
-                                        return;
+                                        function hideDetails() {
+                                            document.getElementById('detailsPanel').classList.remove('active');
+                                        }
+
+                                        // Table rendering
+                                        function renderTable() {
+                                            const tbody = document.getElementById('tableBody');
+                                            const classFilter = document.getElementById('classFilter').value.toLowerCase();
+                                            const verdictFilter = document.getElementById('verdictFilter').value;
+
+                                            let filtered = rawData.filter(d => {
+                                                return d.label.toLowerCase().includes(classFilter) && (!verdictFilter || d.verdict === verdictFilter);
+                                            });
+
+                                            filtered.sort((a, b) => {
+                                                let aVal, bVal;
+                                                switch(currentSort.column) {
+                                                    case 0: aVal = a.label; bVal = b.label; break;
+                                                    case 1: aVal = a.churn; bVal = b.churn; break;
+                                                    case 2: aVal = a.recentChurn; bVal = b.recentChurn; break;
+                                                    case 3: aVal = a.riskScore; bVal = b.riskScore; break;
+                                                    case 4: aVal = a.y; bVal = b.y; break;
+                                                    case 5: aVal = a.lcom4; bVal = b.lcom4; break;
+                                                    case 6: aVal = a.verdict; bVal = b.verdict; break;
+                                                }
+                                                if (typeof aVal === 'string') return currentSort.ascending ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                                                return currentSort.ascending ? aVal - bVal : bVal - aVal;
+                                            });
+
+                                            tbody.innerHTML = filtered.map(d => {
+                                                const fileName = d.label.split('/').pop();
+                                                return `
+                                                <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
+                                                    <td title="${d.label}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">${fileName}</td>
+                                                    <td>${d.churn}</td>
+                                                    <td>${d.recentChurn}</td>
+                                                    <td>${d.riskScore.toFixed(1)}</td>
+                                                    <td>${d.y.toFixed(0)}</td>
+                                                    <td>${d.lcom4.toFixed(1)}</td>
+                                                    <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
+                                                </tr>
+                                            `;}).join('');
+                                        }
+
+                                        function sortTable(column) {
+                                            if (currentSort.column === column) currentSort.ascending = !currentSort.ascending;
+                                            else { currentSort.column = column; currentSort.ascending = false; }
+                                            renderTable();
+                                        }
+
+                                        document.getElementById('classFilter').addEventListener('input', renderTable);
+                                        document.getElementById('verdictFilter').addEventListener('change', renderTable);
+
+                                        // System Map (Circle Packing) rendering - System Map 2.0
+                                        let treemapTooltip = null;
+                                        let resizeTimeout = null;
+                                        let systemMapHud = null;
+
+                                        // Debounce helper
+                                        function debounce(fn, delay) {
+                                            return function(...args) {
+                                                clearTimeout(resizeTimeout);
+                                                resizeTimeout = setTimeout(() => fn.apply(this, args), delay);
+                                            };
+                                        }
+
+                                        // Responsive resize handler
+                                        window.addEventListener('resize', debounce(() => {
+                                            if (document.getElementById('treemap-tab').classList.contains('active')) {
+                                                renderTreemap();
+                                            }
+                                        }, 250));
+
+                                        function renderTreemap() {
+                                            // 1. Validate Container & Dimensions
+                                            const container = document.getElementById('treemap-tab');
+                                            const svgEl = document.getElementById('treemap');
+                                            if (!container || !svgEl) {
+                                                console.error("Missing container or svg element");
+                                                return;
+                                            }
+
+                                            let width = svgEl.clientWidth;
+                                            let height = container.clientHeight - 80;
+
+                                            // Robust fallback for hidden/unmounted state
+                                            if (!width || width === 0) width = container.clientWidth || window.innerWidth || 800;
+                                            if (!height || height <= 0) height = (window.innerHeight * 0.75) - 80;
+                                            if (height < 400) height = 600;
+
+                                            // 2. Clear previous and create/get tooltip
+                                            d3.select('#treemap').selectAll('*').remove();
+                                            d3.select('#treemap')
+                                                .attr('width', width)
+                                                .attr('height', height)
+                                                .style('cursor', 'pointer');
+
+                                            // Virtual Lens Tooltip - create once
+                                            if (!treemapTooltip) {
+                                                treemapTooltip = d3.select('body').append('div')
+                                                    .attr('class', 'virtual-lens');
+                                            }
+                                            // System Map HUD - get once
+                                            if (!systemMapHud) {
+                                                systemMapHud = d3.select('#system-map-hud');
+                                            }
+
+
+                                            // Modern pastel color scale for risk
+                                            const getRiskColorPastel = (d) => {
+                                                const v = d.verdict;
+                                                // High risk - Soft Coral
+                                                if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#ff7675';
+                                                // Medium risk - Soft Amber
+                                                if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY' || v === 'FRAGILE_HUB') return '#fdcb6e';
+                                                // Special types
+                                                if (v === 'DATA_CLASS') return '#74b9ff';
+                                                if (v === 'CONFIGURATION') return '#a29bfe';
+                                                if (v === 'ORCHESTRATOR') return '#81ecec';
+                                                // OK - Mint Green
+                                                if (v === 'OK') return '#00b894';
+                                                // Fallback by score
+                                                const score = d.riskScore || 0;
+                                                if (score > 20) return '#ff7675';
+                                                if (score > 5) return '#fdcb6e';
+                                                return '#00b894';
+                                            };
+
+                                            // Verdict badge color for tooltip
+                                            const getVerdictBadgeStyle = (verdict) => {
+                                                const colors = {
+                                                    'TOTAL_MESS': { bg: '#ff7675', text: '#fff' },
+                                                    'SHOTGUN_SURGERY': { bg: '#e17055', text: '#fff' },
+                                                    'BRAIN_METHOD': { bg: '#a29bfe', text: '#fff' },
+                                                    'GOD_CLASS': { bg: '#636e72', text: '#fff' },
+                                                    'HIDDEN_DEPENDENCY': { bg: '#fdcb6e', text: '#2d3436' },
+                                                    'HIGH_COUPLING': { bg: '#ffeaa7', text: '#2d3436' },
+                                                    'COMPLEX': { bg: '#fab1a0', text: '#2d3436' },
+                                                    'SPLIT_CANDIDATE': { bg: '#d63031', text: '#fff' },
+                                                    'FRAGILE_HUB': { bg: '#e17055', text: '#fff' },
+                                                    'BLOATED': { bg: '#ff7675', text: '#fff' },
+                                                    'DATA_CLASS': { bg: '#74b9ff', text: '#fff' },
+                                                    'CONFIGURATION': { bg: '#a29bfe', text: '#fff' },
+                                                    'ORCHESTRATOR': { bg: '#81ecec', text: '#2d3436' },
+                                                    'OK': { bg: '#00b894', text: '#fff' }
+                                                };
+                                                return colors[verdict] || { bg: '#636e72', text: '#fff' };
+                                            };
+
+                                            try {
+                                                // 3. Data Check
+                                                if (!treemapData || !treemapData.children) {
+                                                    throw new Error("No hierarchical data available");
+                                                }
+
+                                                // 4. Setup Hierarchy
+                                                const root = d3.hierarchy(treemapData)
+                                                    .sum(d => d.value || 0)
+                                                    .sort((a, b) => b.value - a.value);
+
+                                                let focus = root;
+                                                let view;
+
+                                                // 5. Layout
+                                                const pack = d3.pack()
+                                                    .size([width, height])
+                                                    .padding(3);
+
+                                                pack(root);
+
+                                                // 6. Rendering
+                                                const svg = d3.select('#treemap');
+
+                                                // Background click handler
+                                                svg.on('click', (event) => zoom(event, root));
+
+                                                // Helper: Check if node is descendant of target
+                                                const isDescendantOf = (node, target) => {
+                                                    let current = node;
+                                                    while (current) {
+                                                        if (current === target) return true;
+                                                        current = current.parent;
+                                                    }
+                                                    return false;
+                                                };
+
+                                                // Circles
+                                                const node = svg.append('g')
+                                                    .selectAll('circle')
+                                                    .data(root.descendants())
+                                                    .join('circle')
+                                                    .attr('class', d => d.children ? 'node' : 'node node--leaf')
+                                                    .attr('fill', d => {
+                                                        if (d.children) return '#dfe6e9'; // Soft gray for packages
+                                                        try { return getRiskColorPastel(d.data); } catch(e) { return '#b2bec3'; }
+                                                    })
+                                                    .attr('stroke', d => d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                                    .attr('stroke-width', d => d.children ? 1 : 2)
+                                                    .style('opacity', 1)
+                                                    .on('mouseover', function(event, d) {
+                                                        // Hover glow effect
+                                                        const fillColor = d.children ? '#b2bec3' : getRiskColorPastel(d.data);
+                                                        d3.select(this)
+                                                            .attr('stroke', fillColor)
+                                                            .attr('stroke-width', 4)
+                                                            .style('filter', d.children ? 'none' : 'drop-shadow(0 0 10px ' + fillColor + ')');
+
+                                                        // Populate HUD (Fixed Hover Inspector)
+                                                        const hud = d3.select('#system-map-hud');
+                                                        const nodeData = d.data;
+                                                        const isLeaf = !d.children;
+                                                        const fullData = isLeaf ? rawData.find(r => r.label === nodeData.fullName || r.label === nodeData.name) : null;
+
+                                                        let hudHtml = `<h3>${nodeData.name}</h3>`;
+
+                                                        if (isLeaf && fullData) {
+                                                            const verdictStyle = getVerdictBadgeStyle(fullData.verdict);
+                                                            hudHtml += `
+                                                                <div class="hud-row"><span class="hud-label">Risk Score</span> <span class="hud-value">${fullData.riskScore.toFixed(1)}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Complexity</span> <span class="hud-value">${fullData.y.toFixed(0)}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Churn</span> <span class="hud-value">${fullData.churn}</span></div>
+                                                                <div class="hud-valign-center hud-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text}; text-align:center;">${fullData.verdict}</div>
+                                                            `;
+                                                        } else if (isLeaf) {
+                                                            hudHtml += `<div class="hud-row"><span class="hud-label">No analysis data available</span></div>`;
+                                                        } else {
+                                                            const childCount = d.descendants().filter(n => !n.children).length;
+                                                            hudHtml += `
+                                                                <div class="hud-row"><span class="hud-label">Items (Recursive)</span> <span class="hud-value">${childCount}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Direct Children</span> <span class="hud-value">${d.children.length}</span></div>
+                                                                <div class="hud-row"><span class="hud-label">Total Size</span> <span class="hud-value">${(d.value || 0).toLocaleString()}</span></div>
+                                                            `;
+                                                        }
+
+                                                        hud.html(hudHtml)
+                                                           .style('display', 'block')
+                                                           .style('opacity', 1);
+                                                    })
+                                                    .on('mouseout', function(d) {
+                                                        d3.select(this)
+                                                            .attr('stroke', d.children ? '#b2bec3' : 'rgba(255,255,255,0.8)')
+                                                            .attr('stroke-width', d.children ? 1 : 2)
+                                                            .style('filter', 'none');
+                                                        // Hide HUD on mouseout
+                                                        d3.select('#system-map-hud').style('opacity', 0);
+                                                    })
+                                                    .on('click', (event, d) => {
+                                                        event.stopPropagation();
+                                                        updateBreadcrumbs(d);
+                                                        // Fix: Zoom to parent if leaf node to maintain context
+                                                        if (d.children) zoom(event, d);
+                                                        else if (d.parent) zoom(event, d.parent);
+                                                        else zoom(event, d);
+
+                                                        // RESTORED: Show details panel for files
+                                                        if (!d.children) {
+                                                            const classData = rawData.find(r => r.label === d.data.fullName || r.label === d.data.name);
+                                                            if (classData) showDetails(classData);
+                                                        }
+                                                    });
+
+                                                // Labels - show actual node name (filename for files, folder for packages)
+                                                const label = svg.append('g')
+                                                    .style('font', '10px sans-serif')
+                                                    .attr('pointer-events', 'none')
+                                                    .attr('text-anchor', 'middle')
+                                                    .selectAll('text')
+                                                    .data(root.descendants())
+                                                    .join('text')
+                                                    .style('fill-opacity', d => d.parent === root ? 1 : 0)
+                                                    .style('display', d => d.parent === root ? 'inline' : 'none')
+                                                    .style('font-weight', d => d.children ? 'bold' : 'normal')
+                                                    .style('fill', '#1a1a2e')
+                                                    .style('paint-order', 'stroke')
+                                                    .style('stroke', 'rgba(255,255,255,0.85)')
+                                                    .style('stroke-width', '2.5px')
+                                                    .text(d => {
+                                                        // Show the node's OWN name (filename for files, folder name for directories)
+                                                        const name = d.data.name;
+                                                        // Truncate long names to prevent overlap
+                                                        return name.length > 15 ? name.substring(0, 12) + '...' : name;
+                                                    });
+            """;
+    private static String TEMPLATE_BODY_PART2 = """
+                                    // Initial Zoom
+                                    zoomTo([root.x, root.y, root.r * 2]);
+
+                                    // --- Helper Functions ---
+
+                                    function zoom(event, d) {
+                                        focus = d;
+
+                                        // Cinematic smooth zoom with d3.interpolateZoom
+                                        // Use shorter duration for large datasets (performance optimization)
+                                        const nodeCount = root.descendants().length;
+                                        const duration = nodeCount > 500 ? 400 : 750;
+
+                                        const transition = svg.transition()
+                                            .duration(duration)
+                                            .tween('zoom', () => {
+                                                const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
+                                                return t => zoomTo(i(t));
+                                            });
+
+                                        // Fade effect for non-relevant siblings
+                                        node.transition(transition)
+                                            .style('opacity', n => {
+                                                // Always show root and current focus tree
+                                                if (n === root || isDescendantOf(n, focus) || isDescendantOf(focus, n)) return 1;
+                                                // Fade siblings
+                                                return 0.15;
+                                            });
+
+                                        // Label transitions
+                                        label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
+                                             .transition(transition)
+                                             .style('fill-opacity', d => d.parent === focus ? 1 : 0)
+                                             .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
+                                             .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
+
+                                        updateBreadcrumbs(d);
                                     }
 
-                                    if (focus !== d) {
-                                        zoom(event, d);
-                                        event.stopPropagation();
+                                    function zoomTo(v) {
+                                        const k = Math.min(width, height) / v[2];
+                                        view = v;
+                                        label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                        node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
+                                        node.attr('r', d => d.r * k);
+
+                                        // Show labels on circles with visible radius > 20px (Fix 6)
+                                        label.each(function(d) {
+                                            const visibleR = d.r * k;
+                                            const isLeaf = !d.children;
+                                            const shouldShow = (d.parent === focus) || (isLeaf && visibleR > 20);
+                                            d3.select(this)
+                                                .style('display', shouldShow ? 'inline' : 'none')
+                                                .style('fill-opacity', shouldShow ? Math.min(1, (visibleR - 15) / 20) : 0)
+                                                .style('font-size', Math.max(10, Math.min(14, visibleR / 3)) + 'px');
+                                        });
+                                    }
+
+                                    function updateBreadcrumbs(n) {
+                                        const bc = d3.select('#breadcrumbs');
+                                        bc.selectAll('*').remove();
+                                        const path = [];
+                                        let curr = n;
+                                        while(curr) { path.unshift(curr); curr = curr.parent; }
+
+                                        path.forEach((node, i) => {
+                                            const isLast = i === path.length - 1;
+                                            const span = bc.append('span')
+                                                .text(node.data.name)
+                                                .attr('class', 'crumb')
+                                                .style('cursor', isLast ? 'default' : 'pointer');
+                                            if (!isLast) {
+                                                span.on('click', (e) => {
+                                                    e.stopPropagation();
+                                                    zoom(e, node);
+                                                });
+                                                bc.append('span').text('›').attr('class', 'crumb-separator');
+                                            }
+                                        });
+                                    }
+
+                                    // Init Breadcrumbs
+                                    updateBreadcrumbs(root);
+
+                                } catch (e) {
+                                    console.error("Render Error:", e);
+                                    d3.select('#treemap')
+                                        .append('text')
+                                        .attr('x', width / 2).attr('y', height / 2)
+                                        .attr('text-anchor', 'middle')
+                                        .attr('fill', '#ff7675')
+                                        .style('font-size', '18px')
+                                        .text('Error: ' + e.message);
+                                }
+                            }
+
+
+                        // Network rendering
+                        function renderNetwork() {
+                            const container = document.getElementById('network-container');
+                            const width = container.clientWidth || 800;
+                            const height = container.clientHeight || 600;
+
+                            d3.select('#network').selectAll('*').remove();
+
+                            const svg = d3.select('#network')
+                                .attr('width', width)
+                                .attr('height', height);
+
+                            if (!networkData.nodes || networkData.nodes.length === 0) {
+                                const msgGroup = svg.append('g')
+                                    .attr('transform', `translate(${width/2}, ${height/2})`);
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', -30)
+                                    .text('📊 No Temporal Coupling Detected')
+                                    .style('font-size', '18px')
+                                    .style('font-weight', 'bold')
+                                    .style('fill', '#666');
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', 5)
+                                    .text('Temporal coupling requires files that change together frequently.')
+                                    .style('font-size', '14px')
+                                    .style('fill', '#999');
+
+                                msgGroup.append('text')
+                                    .attr('text-anchor', 'middle')
+                                    .attr('y', 30)
+                                    .text('Try running with deeper git history: --min-churn 2')
+                                    .style('font-size', '13px')
+                                    .style('fill', '#aaa')
+                                    .style('font-style', 'italic');
+                                return;
+                            }
+
+                            // Add zoom behavior
+                const g = svg.append('g');
+                const zoomBehavior = d3.zoom()
+                    .extent([[0, 0], [width, height]])
+                    .scaleExtent([0.1, 4])
+                    .on('zoom', (event) => g.attr('transform', event.transform));
+
+                svg.call(zoomBehavior)
+                    .on('click', (event) => {
+                                    if (event.target.tagName !== 'circle') {
+                                        // Reset highlights on background click
+                                        node.style('opacity', 1);
+                                        link.style('opacity', 1);
+                                        nodeGroup.selectAll('text').style('opacity', 1);
                                     }
                                 });
 
-                            // Tooltips
-                            node.append('title')
-                                .text(d => `${d.data.name}\nLOC: ${d.value}\nRisk: ${(d.data.riskScore || 0).toFixed(1)}`);
+                            const simulation = d3.forceSimulation(networkData.nodes)
+                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
+                                .force('charge', d3.forceManyBody().strength(-300))
+                                .force('center', d3.forceCenter(width / 2, height / 2))
+                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
 
-                            // Labels
-                            const label = svg.append('g')
-                                .style('font', '12px sans-serif')
-                                .attr('pointer-events', 'none')
-                                .attr('text-anchor', 'middle')
-                                .selectAll('text')
-                                .data(root.descendants())
-                                .join('text')
-                                .style('fill-opacity', d => d.parent === root ? 1 : 0)
-                                .style('display', d => d.parent === root ? 'inline' : 'none')
-                                .style('font-weight', d => d.children ? 'bold' : 'normal')
-                                .style('fill', '#2c3e50')
-                                .text(d => d.data.name);
+                            const link = g.append('g')
+                                .attr('class', 'links')
+                                .selectAll('line')
+                                .data(networkData.links)
+                                .join('line')
+                                .attr('class', 'link')
+                                .attr('stroke-width', d => Math.sqrt(d.value));
 
-                            // Initial Zoom
-                            zoomTo([root.x, root.y, root.r * 2]);
-
-                            // --- Helper Functions ---
-
-                            function zoom(event, d) {
-                                focus = d;
-                                const transition = svg.transition().duration(750)
-                                    .tween('zoom', d => {
-                                        const i = d3.interpolateZoom(view, [focus.x, focus.y, focus.r * 2]);
-                                        return t => zoomTo(i(t));
-                                    });
-
-                                label.filter(function(d) { return d.parent === focus || this.style.display === 'inline'; })
-                                     .transition(transition)
-                                     .style('fill-opacity', d => d.parent === focus ? 1 : 0)
-                                     .on('start', function(d) { if (d.parent === focus) this.style.display = 'inline'; })
-                                     .on('end', function(d) { if (d.parent !== focus) this.style.display = 'none'; });
-
-                                updateBreadcrumbs(d);
-                            }
-
-                            function zoomTo(v) {
-                                const k = Math.min(width, height) / v[2];
-                                view = v;
-                                label.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
-                                node.attr('transform', d => `translate(${(d.x - v[0]) * k + width / 2},${(d.y - v[1]) * k + height / 2})`);
-                                node.attr('r', d => d.r * k);
-                            }
-
-                            function updateBreadcrumbs(n) {
-                                const bc = d3.select('#breadcrumbs');
-                                bc.selectAll('*').remove();
-                                const path = [];
-                                let curr = n;
-                                while(curr) { path.unshift(curr); curr = curr.parent; }
-
-                                path.forEach((node, i) => {
-                                    const isLast = i === path.length - 1;
-                                    const span = bc.append('span')
-                                        .text(node.data.name)
-                                        .attr('class', 'crumb')
-                                        .style('cursor', isLast ? 'default' : 'pointer');
-                                    if (!isLast) {
-                                        span.on('click', (e) => zoom(e, node));
-                                        bc.append('span').text(' > ').attr('class', 'crumb-separator');
-                                    }
+                            // Add node groups to hold circle and text
+                            const nodeGroup = g.append('g')
+                                .attr('class', 'nodes')
+                                .selectAll('g')
+                                .data(networkData.nodes)
+                                .join('g')
+                                .call(d3.drag()
+                                    .on('start', dragstarted)
+                                    .on('drag', dragged)
+                                    .on('end', dragended))
+                                .on('end', () => {
+                                     // Delayed auto-zoom to ensure layout stabilization
+                                     setTimeout(() => {
+                                         const bounds = g.node().getBBox();
+                                         const fullWidth = width;
+                                         const fullHeight = height;
+                                         const midX = bounds.x + bounds.width / 2;
+                                         const midY = bounds.y + bounds.height / 2;
+                                         if (bounds.width > 0 && bounds.height > 0) {
+                                             const scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
+                                             const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
+                                             svg.transition().duration(750).call(
+                                                 zoomBehavior.transform,
+                                                 d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                                             );
+                                         }
+                                     }, 500);
                                 });
-                            }
-                            // Init Breadcrumbs
-                            updateBreadcrumbs(root);
 
-                        } catch (e) {
-                            console.error("Render Error:", e);
-                            d3.select('#treemap')
-                                .append('text')
-                                .attr('x', width / 2).attr('y', height / 2)
-                                .attr('text-anchor', 'middle')
-                                .attr('fill', 'red')
-                                .style('font-size', '20px')
-                                .text('Error: ' + e.message);
-                        }
-                    }
+                // Add Zoom Controls
+                const controls = d3.select('#network-container').append('div')
+                    .style('position', 'absolute')
+                    .style('bottom', '20px')
+                    .style('right', '20px')
+                    .style('display', 'flex')
+                    .style('gap', '5px')
+                    .style('z-index', '1000');
 
+                const createButton = (text, onClick, title) => {
+                controls.append('button')
+                    .text(text)
+                    .attr('title', title)
+                    .style('width', '30px')
+                    .style('height', '30px')
+                    .style('border', 'none')
+                    .style('background', '#fff')
+                    .style('box-shadow', '0 2px 5px rgba(0,0,0,0.2)')
+                    .style('border-radius', '4px')
+                    .style('cursor', 'pointer')
+                    .style('font-weight', 'bold')
+                    .style('color', '#555')
+                    .on('mousedown', function() { d3.select(this).style('background', '#f0f0f0'); })
+                    .on('mouseup', function() { d3.select(this).style('background', '#fff'); })
+                    .on('click', onClick);
+            };
 
-                // Network rendering
-                function renderNetwork() {
-                    const container = document.getElementById('network-container');
-                    const width = container.clientWidth || 800;
-                    const height = container.clientHeight || 600;
+            createButton('+', () => svg.transition().call(zoomBehavior.scaleBy, 1.3), 'Zoom In');
+            createButton('-', () => svg.transition().call(zoomBehavior.scaleBy, 0.7), 'Zoom Out');
+            createButton('⤢', () => {
+                 const bounds = g.node().getBBox();
+                 // Re-calculate dimensions to handle resizing/hidden tab initializations
+                 const container = document.getElementById('network-container');
+                 const fullWidth = container ? (container.clientWidth || width) : width;
+                 const fullHeight = container ? (container.clientHeight || height) : height;
+                 // Validate bounds
+                 if (!isFinite(bounds.width) || !isFinite(bounds.height) || bounds.width === 0 || bounds.height === 0) {
+                     console.warn("Invalid bounds for fit:", bounds);
+                     return;
+                 }
 
-                    d3.select('#network').selectAll('*').remove();
+                 const midX = bounds.x + bounds.width / 2;
+                 const midY = bounds.y + bounds.height / 2;
 
-                    const svg = d3.select('#network')
-                        .attr('width', width)
-                        .attr('height', height);
+                 // Clamp scale to prevent blowing up
+                 let scale = 0.85 / Math.max(bounds.width / fullWidth, bounds.height / fullHeight);
+                 scale = Math.max(0.1, Math.min(scale, 4)); // Clamp between 0.1x and 4x
 
-                    if (!networkData.nodes || networkData.nodes.length === 0) {
-                        svg.append('text')
-                            .attr('x', container.clientWidth / 2)
-                            .attr('y', container.clientHeight / 2)
-                            .attr('text-anchor', 'middle')
-                            .text('No significant temporal coupling found in top risky classes')
-                            .style('font-size', '16px')
-                            .style('fill', '#999');
-                        return;
-                    }
+                 const translate = [fullWidth / 2 - scale * midX, fullHeight / 2 - scale * midY];
 
-                    // Add zoom behavior
-                    const g = svg.append('g');
-                    svg.call(d3.zoom()
-                        .extent([[0, 0], [width, height]])
-                        .scaleExtent([0.1, 4])
-                        .on('zoom', (event) => g.attr('transform', event.transform)))
-                        .on('click', (event) => {
-                            if (event.target.tagName !== 'circle') {
-                                // Reset highlights on background click
-                                node.style('opacity', 1);
-                                link.style('opacity', 1);
-                                nodeGroup.selectAll('text').style('opacity', 1);
-                            }
-                        });
+                 if (!isFinite(translate[0]) || !isFinite(translate[1])) {
+                      console.warn("Invalid translate for fit:", translate);
+                      return;
+                 }
 
-                    const simulation = d3.forceSimulation(networkData.nodes)
-                        .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
-                        .force('charge', d3.forceManyBody().strength(-300))
-                        .force('center', d3.forceCenter(width / 2, height / 2))
-                        .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
+                 svg.transition().duration(750).call(
+                     zoomBehavior.transform,
+                     d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                 );
+            }, 'Fit to Screen');
 
-                    const link = g.append('g')
-                        .attr('class', 'links')
-                        .selectAll('line')
-                        .data(networkData.links)
-                        .join('line')
-                        .attr('class', 'link')
-                        .attr('stroke-width', d => Math.sqrt(d.value));
+                            // Network tooltip (Virtual Lens style)
+                             const networkTooltip = d3.select('body').append('div')
+                                .attr('class', 'treemap-tooltip')
+                                .style('opacity', 0)
+                                .style('z-index', '9999'); // Ensure tooltip is on top
 
-                    // Add node groups to hold circle and text
-                    const nodeGroup = g.append('g')
-                        .attr('class', 'nodes')
-                        .selectAll('g')
-                        .data(networkData.nodes)
-                        .join('g')
-                        .call(d3.drag()
-                            .on('start', dragstarted)
-                            .on('drag', dragged)
-                            .on('end', dragended));
-
-                    const node = nodeGroup.append('circle')
-                        .attr('class', 'node')
-                        .attr('r', d => Math.sqrt(d.riskScore) * 2 + 5)
-                        .attr('fill', d => getRiskColor(d.riskScore))
+                            // Add nodes
+                            const node = nodeGroup.append('circle')
+                                .attr('class', 'node')
+                                .attr('r', d => Math.max(10, Math.sqrt(d.riskScore) * 4 + 8))
+                                .attr('fill', d => {
+                                    // Non-linear gradient for better contrast
+                                    // Using power 0.4 makes mid-range risks appear more colorful/intense
+                                    const baseColor = getRiskColor(d);
+                                    const maxRisk = Math.max(...networkData.nodes.map(n => n.riskScore)) || 100;
+                                    const ratio = d.riskScore / maxRisk;
+                                    const intensity = Math.pow(ratio, 0.4);
+                                    // Interpolate between a light pastel (0.1) and full rich color
+                                    return d3.interpolateRgb(d3.color(baseColor).brighter(1.5), baseColor)(0.2 + 0.8 * intensity);
+                                })
+                                .attr('stroke', '#fff')
+                                .attr('stroke-width', 2)
+                                .style('cursor', 'grab')
+                                .on('mouseover', function(event, d) {
+                                    d3.select(this).attr('stroke-width', 4).attr('stroke', '#667');
+                                    // Show tooltip with full path
+                                    const verdictStyle = getVerdictBadgeStyle(d.verdict);
+                                    networkTooltip
+                                        .html(`
+                                            <div class="lens-title">${d.id}</div>
+                                            <div class="lens-metrics">
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.riskScore.toFixed(1)}</span>
+                                                    <span class="lens-metric-label">Risk</span>
+                                                </div>
+                                                <div class="lens-metric">
+                                                    <span class="lens-metric-value">${d.coupled}</span>
+                                                    <span class="lens-metric-label">Coupled</span>
+                                                </div>
+                                            </div>
+            """;
+    private static String TEMPLATE_BODY_PART3 = """
+                                    <div class="lens-verdict" style="background: ${verdictStyle.bg}; color: ${verdictStyle.text};">${d.verdict}</div>
+                                `)
+                                .style('opacity', 1)
+                                .style('left', (event.pageX + 15) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                            // Ensure label is 100% visible on hover
+                            d3.select(this.parentNode).select('text').style('opacity', 1);
+                        })
+                        .on('mousemove', function(event) {
+                            networkTooltip
+                                .style('left', (event.pageX + 15) + 'px')
+                                .style('top', (event.pageY - 10) + 'px');
+                        })
+                        .on('mouseout', function(event, d) {
+                            d3.select(this).attr('stroke-width', 2).attr('stroke', '#fff');
+                            networkTooltip.style('opacity', 0);
+                            // Restore labels
+                            // connectedNodes logic might have dimmed them, so check if we are in a 'active' state
+                            // For simplicity, restore to 1 unless pinned/filtered logic is added later
+                             d3.select(this.parentNode).select('text').style('opacity', 1);
+                        })
                         .on('click', (event, d) => {
-                            event.stopPropagation(); // Prevent background click
+                            event.stopPropagation();
+                            d.pinned = !d.pinned; // Toggle pin state
                             const classData = rawData.find(r => r.label === d.id);
                             if (classData) showDetails(classData);
 
-                            // Highlight Logic
+                            // Highlight only immediate connections
                             const connectedNodes = new Set();
                             connectedNodes.add(d.id);
-
                             networkData.links.forEach(l => {
                                 if (l.source.id === d.id) connectedNodes.add(l.target.id);
                                 if (l.target.id === d.id) connectedNodes.add(l.source.id);
                             });
 
-                            node.style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.1);
-                            link.style('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.05);
-                            nodeGroup.selectAll('text').style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.1);
+                            node.transition().duration(200)
+                                .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.15);
+                            link.transition().duration(200)
+                                .style('opacity', l => (l.source.id === d.id || l.target.id === d.id) ? 1 : 0.08)
+                                .attr('stroke-width', l => (l.source.id === d.id || l.target.id === d.id) ? 3 : 1);
+
+                            // Dim labels of non-connected nodes instead of hiding them completely
+                            nodeGroup.selectAll('text').transition().duration(200)
+                                .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2);
                         });
 
-                    // Add text label
+                    // Add text label - ALL labels visible
                     nodeGroup.append('text')
-                        .text(d => d.name)
-                        .attr('x', d => Math.sqrt(d.riskScore) * 2 + 8)
+                        .text(d => {
+                            const parts = d.name.split('/');
+                            return parts[parts.length - 1]; // Short filename
+                        })
+                        .attr('x', d => Math.max(12, Math.sqrt(d.riskScore) * 4 + 12))
                         .attr('y', 4)
                         .attr('class', 'node-label')
-                        .style('font-size', '12px')
-                        .style('fill', '#333')
+                        .style('font-size', d => Math.max(9, Math.sqrt(d.riskScore) + 6) + 'px') // Dynamic font size
+                        .style('font-weight', 'bold')
+                        .style('fill', '#2c3e50') // Corrected property
+                        .style('opacity', 1) // Force 100% visibility
                         .style('pointer-events', 'none')
-                        .style('text-shadow', '1px 1px 2px white');
+                        .style('paint-order', 'stroke')
+                        .style('stroke', 'rgba(255,255,255,0.95)')
+                        .style('stroke-width', '2.5px');
 
                     // Add link titles
                     link.append('title').text('Temporally Coupled');
-                    node.append('title').text(d => d.name + ' (Risk: ' + d.riskScore.toFixed(1) + ')');
 
                     simulation.on('tick', () => {
                         link
@@ -865,32 +1329,49 @@ public class HtmlReporter {
                             .attr('transform', d => `translate(${d.x},${d.y})`);
                     });
 
-                        function dragstarted(event, d) {
-                            if (!event.active) simulation.alphaTarget(0.3).restart();
-                            d.fx = d.x;
-                            d.fy = d.y;
-                        }
-
-                        function dragged(event, d) {
-                            d.fx = event.x;
-                            d.fy = event.y;
-                        }
-
-                        function dragended(event, d) {
-                            if (!event.active) simulation.alphaTarget(0);
-                            d.fx = null;
-                            d.fy = null;
-                        }
+                    function dragstarted(event, d) {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                        d3.select(event.sourceEvent.target).style('cursor', 'grabbing');
                     }
 
+                    function dragged(event, d) {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    }
+
+                    function dragended(event, d) {
+                        if (!event.active) simulation.alphaTarget(0);
+                        // STICKY: Keep position fixed where user dropped it
+                        // d.fx and d.fy remain set, so node stays in place
+                        d3.select(event.sourceEvent.target).style('cursor', 'grab');
+                    }
+                }
+
                     function diagnose(d) {
+                        // Core verdicts from ForensicRuleEngine
+                        if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic into a single module" };
+                        if (d.verdict === 'HIDDEN_DEPENDENCY') return { title: "Hidden Dependency", desc: "Temporal coupling without code link", why: `Changes with ${d.coupled} files but only ${d.fanOut} imports`, fix: "Make dependencies explicit via imports or extract shared logic" };
+                        if (d.verdict.startsWith('GOD_CLASS')) return { title: "God Class", desc: "Too many responsibilities", why: `Total CC ${d.y}, Fan-out ${d.fanOut}`, fix: "Full decomposition required" };
+                        if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split the class by responsibility" };
                         if (d.verdict === 'BRAIN_METHOD') return { title: "One-Method Monster", desc: "Contains massive methods", why: `Found ${d.brainMethods.length} complex methods`, fix: "Extract Method pattern" };
-                        if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic" };
-                        if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4}`, fix: "Split the class" };
-                                    if (d.verdict === 'DATA_CLASS') return { title: "Data Carrier", desc: "Mostly Getters/Setters", why: "80%+ of methods are boilerplate", fix: "Benign fragmentation. No action needed." };
-                                    if (d.verdict === 'CONFIGURATION') return { title: "App Blueprint", desc: "Spring @Configuration Class", why: "High fragmentation is expected for factory classes", fix: "Benign fragmentation. No action needed." };
-                                    if (d.verdict === 'ORCHESTRATOR') return { title: "Manager of Workers", desc: "Orchestrates complex flows", why: `High fan-out (${d.coupled}) but low internal complexity`, fix: "Maintainable pattern. Keep it cohesive." };                        if (d.verdict === 'GOD_CLASS') return { title: "God Class", desc: "Does everything", why: `Total CC ${d.y}`, fix: "Full refactor" };
-                        return { title: "Healthy Code", desc: "No major issues", why: "Metrics OK", fix: "Keep it up!" };
+                        if (d.verdict.startsWith('COMPLEX')) return { title: "Complex Code", desc: "High cyclomatic complexity", why: `Max CC = ${d.maxCC}`, fix: "Simplify conditionals, extract helper methods" };
+                        if (d.verdict === 'FRAGILE_HUB') return { title: "Fragile Hub", desc: "Central coordinator that changes often", why: `Fan-out ${d.fanOut}, Churn ${d.churn}`, fix: "Consider event-driven architecture or dependency injection" };
+                        if (d.verdict === 'SPLIT_CANDIDATE') return { title: "Split Candidate", desc: "Contains disconnected clusters", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split into separate classes based on field usage" };
+                        if (d.verdict === 'HIGH_COUPLING') return { title: "High Coupling", desc: "Too many dependencies", why: `Fan-out = ${d.fanOut}`, fix: "Reduce dependencies, use interfaces or dependency injection" };
+                        if (d.verdict === 'BLOATED') return { title: "Bloated File", desc: "Large file with many lines", why: `LOC = ${d.loc}`, fix: "Consider splitting into smaller, focused modules" };
+
+                        // Benign verdicts (special cases)
+                        if (d.verdict === 'DATA_CLASS') return { title: "Data Carrier", desc: "Mostly Getters/Setters", why: "80%+ of methods are boilerplate", fix: "Benign fragmentation. No action needed." };
+                        if (d.verdict === 'CONFIGURATION') return { title: "App Blueprint", desc: "Spring @Configuration Class", why: "High fragmentation is expected for factory classes", fix: "Benign fragmentation. No action needed." };
+                        if (d.verdict === 'ORCHESTRATOR') return { title: "Manager of Workers", desc: "Orchestrates complex flows", why: `High fan-out (${d.coupled}) but low internal complexity`, fix: "Maintainable pattern. Keep it cohesive." };
+
+                        // OK verdict - healthy code
+                        if (d.verdict === 'OK') return { title: "Healthy Code", desc: "No major issues", why: "Metrics OK", fix: "Keep it up!" };
+
+                        // Fallback for any unhandled verdict
+                        return { title: d.verdict, desc: "See metrics for details", why: "Custom or unrecognized verdict", fix: "Review metrics below" };
                     }
 
                     function getPrescriptions(d) {
@@ -1047,4 +1528,9 @@ public class HtmlReporter {
             </body>
             </html>
             """;
+
+    private static final String TEMPLATE_BODY;
+    static {
+        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
+    }
 }
