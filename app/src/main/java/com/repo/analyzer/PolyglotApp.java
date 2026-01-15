@@ -8,6 +8,7 @@ import com.repo.analyzer.git.SocialForensics;
 import com.repo.analyzer.report.AnalysisData;
 import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
+import com.repo.analyzer.report.JsonDataConverter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
 import com.repo.analyzer.testability.TestabilityAnalyzer;
 
@@ -340,6 +341,12 @@ public class PolyglotApp {
 
         new HtmlReporter().generate(reportData, htmlPath);
         new CsvReporter().generate(reportData, csvPath);
+
+        // Generate JSON for AI/Tools
+        Path jsonPath = args.outputDir().resolve("panopticon-data.json");
+        String jsonOutput = new JsonDataConverter().convertToDataJson(reportData);
+        Files.writeString(jsonPath, jsonOutput);
+        System.out.println("JSON Report generated at: " + jsonPath);
 
         // Summary
         printSummary(reportData);

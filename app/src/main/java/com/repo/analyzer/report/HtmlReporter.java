@@ -289,18 +289,6 @@ public class HtmlReporter {
                                                         <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
                                                         <select id="verdictFilter">
                                                             <option value="">All Verdicts</option>
-                                                            <option value="TOTAL_MESS">TOTAL_MESS</option>
-                                                            <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
-                                                            <option value="BRAIN_METHOD">BRAIN_METHOD</option>
-                                                            <option value="GOD_CLASS">GOD_CLASS</option>
-                                                            <option value="KNOWLEDGE_ISLAND">KNOWLEDGE_ISLAND</option>
-                                                            <option value="UNTESTED_HOTSPOT">UNTESTED_HOTSPOT</option>
-                                                            <option value="SPLIT_CANDIDATE">SPLIT_CANDIDATE</option>
-                                                            <option value="HIDDEN_DEPENDENCY">HIDDEN_DEPENDENCY</option>
-                                                            <option value="HIGH_COUPLING">HIGH_COUPLING</option>
-                                                            <option value="COMPLEX (Low Risk)">COMPLEX (Low Risk)</option>
-                                                            <option value="BLOATED">BLOATED</option>
-                                                            <option value="FRAGILE_HUB">FRAGILE_HUB</option>
                                                         </select>
                                                     </div>
                                                     <table id="dataTable">
@@ -372,6 +360,20 @@ public class HtmlReporter {
                                         const treemapData = {{TREEMAP_DATA}};
                                         const networkData = {{NETWORK_DATA}};
                                         let currentSort = { column: 3, ascending: false };
+
+                                        // Populate verdict filter dynamically
+                                        try {
+                                            const uniqueVerdicts = [...new Set(rawData.map(d => d.verdict))].filter(v => v).sort();
+                                            const filterSelect = document.getElementById('verdictFilter');
+                                            if (filterSelect) {
+                                                uniqueVerdicts.forEach(v => {
+                                                    const option = document.createElement('option');
+                                                    option.value = v;
+                                                    option.textContent = v;
+                                                    filterSelect.appendChild(option);
+                                                });
+                                            }
+                                        } catch (e) { console.error("Error populating filter", e); }
 
                                         // Fix: Hide loading overlay immediately as data is embedded
                                         try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
