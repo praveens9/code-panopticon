@@ -62,3 +62,4 @@ panopticon-report.html
 app/graphs/
 # Generated reports
 reports/
+app/bin/
