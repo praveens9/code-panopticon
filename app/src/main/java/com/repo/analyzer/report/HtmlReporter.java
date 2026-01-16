@@ -274,12 +274,12 @@ public class HtmlReporter {
                                                         <h1>Code Forensics: Risk Analysis</h1>
 
                                                         <div class="tabs">
-                                                            <button class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
-                                                            <button class="tab" onclick="switchTab('quadrant')">Quadrant View</button>
-                                                            <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                                            <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                                            <button class="tab" onclick="switchTab('network')">Coupling Graph</button>
-                                                <button class="tab" onclick="switchTab('philosophy')">Philosophy</button>
+                                                            <button id="btn-dashboard" class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+                                                            <button id="btn-quadrant" class="tab" onclick="switchTab('quadrant')">Quadrant View</button>
+                                                            <button id="btn-table" class="tab" onclick="switchTab('table')">Data Table</button>
+                                                            <button id="btn-treemap" class="tab" onclick="switchTab('treemap')">System Map</button>
+                                                            <button id="btn-network" class="tab" onclick="switchTab('network')">Coupling Graph</button>
+                                                <button id="btn-philosophy" class="tab" onclick="switchTab('philosophy')">Philosophy</button>
 
                                                         </div>
 
@@ -523,8 +523,11 @@ public class HtmlReporter {
                                                     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
                                                     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-                                                    event.target.classList.add('active');
-                                                    document.getElementById(tabName + '-tab').classList.add('active');
+                                                    const btn = document.getElementById('btn-' + tabName);
+                                                    if (btn) btn.classList.add('active');
+
+                                                    const content = document.getElementById(tabName + '-tab');
+                                                    if (content) content.classList.add('active');
 
                                                     if (tabName === 'table') renderTable();
                                                     if (tabName === 'treemap') renderTreemap();
@@ -594,13 +597,13 @@ public class HtmlReporter {
                                                     topRisks.forEach((d, i) => {
                                                         const item = document.createElement('div');
                                                         const riskColor = getRiskColor(d);
-                                                        item.style.cssText = "display: flex; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #eee; transition: background 0.2s;";
+                                                        item.style.cssText = "display: flex; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #eee; transition: background 0.2s; min-width: 0;";
                                                         item.onmouseover = () => item.style.background = '#f9f9f9';
                                                         item.onmouseout = () => item.style.background = '#fff';
 
                                                         item.innerHTML = `
-                                                            <div style="font-weight: bold; color: #95a5a6; width: 30px; font-size: 1.1rem;">${i+1}.</div>
-                                                            <div style="flex: 1; overflow: hidden; padding-right: 10px;">
+                                                            <div style="font-weight: bold; color: #95a5a6; width: 30px; font-size: 1.1rem; flex-shrink: 0;">${i+1}.</div>
+                                                            <div style="flex: 1; overflow: hidden; padding-right: 10px; min-width: 0;">
                                                                 <div style="font-family: monospace; font-size: 0.95rem; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.label}">${d.label}</div>
                                                             </div>
                                                             <div style="text-align: right; min-width: 140px;">
