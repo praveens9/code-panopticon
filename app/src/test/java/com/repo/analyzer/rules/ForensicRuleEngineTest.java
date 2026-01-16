@@ -2,6 +2,7 @@ package com.repo.analyzer.rules;
 
 import com.repo.analyzer.core.AnalyzerConfig;
 import com.repo.analyzer.core.FileMetrics;
+import com.repo.analyzer.git.SocialForensics;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -86,5 +87,29 @@ class ForensicRuleEngineTest {
 
         String verdict = engine.evaluate(metrics, 1, 1, 0, config);
         assertEquals("OK", verdict);
+    }
+
+    @Test
+    void testKnowledgeIsland() {
+        // Condition: SocialForensics.isKnowledgeIsland() == true
+        FileMetrics metrics = FileMetrics.basic("Secret.java", "java", 100, 5);
+        SocialForensics social = new SocialForensics(
+                20, "DevA", 0.8, 0, 0, 1, true, false, List.of());
+
+        ForensicRuleEngine.EvaluationContext ctx = new ForensicRuleEngine.EvaluationContext(
+                metrics, 5, 5, 0, config, social, false);
+
+        assertEquals("KNOWLEDGE_ISLAND", engine.evaluate(ctx));
+    }
+
+    @Test
+    void testUntestedHotspot() {
+        // Condition: isUntestedHotspot == true (and not Knowledge Island)
+        FileMetrics metrics = FileMetrics.basic("Risky.java", "java", 100, 5);
+
+        ForensicRuleEngine.EvaluationContext ctx = new ForensicRuleEngine.EvaluationContext(
+                metrics, 5, 5, 0, config, SocialForensics.empty(), true);
+
+        assertEquals("UNTESTED_HOTSPOT", engine.evaluate(ctx));
     }
 }

@@ -4,18 +4,27 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
-import java.util.stream.Collectors;
 
 public class HtmlReporter {
 
-    public void generate(List<AnalysisData> data, Path outputPath) {
-        String json = convertToJson(data);
-        String treemapJson = convertToHierarchyJson(data);
-        String networkJson = convertToNetworkJson(data);
+    public record AnalysisStats(int analyzed, int skipped, int total) {
+    }
+
+    private final JsonDataConverter jsonConverter = new JsonDataConverter();
+
+    public void generate(List<AnalysisData> data, AnalysisStats stats, Path outputPath) {
+        String json = jsonConverter.convertToDataJson(data);
+        String statsJson = String.format("{\"analyzed\": %d, \"skipped\": %d, \"total\": %d}", stats.analyzed,
+                stats.skipped, stats.total);
+        String treemapJson = jsonConverter.convertToHierarchyJson(data);
+
+        String networkJson = jsonConverter.convertToNetworkJson(data);
 
         String html = new StringBuilder(TEMPLATE_HEAD).append(TEMPLATE_BODY).toString()
                 .replace("{{DATA_PLACEHOLDER}}", json)
+                .replace("{{STATS_PLACEHOLDER}}", statsJson)
                 .replace("{{TREEMAP_DATA}}", treemapJson)
+
                 .replace("{{NETWORK_DATA}}", networkJson);
 
         try {
@@ -26,163 +35,13 @@ public class HtmlReporter {
         }
     }
 
+    // Keep these package-private for tests - delegate to JsonDataConverter
     String convertToJson(List<AnalysisData> data) {
-        return data.stream()
-                .map(d -> String.format(
-                        "{ x: %d, y: %.2f, r: %.2f, label: '%s', cohesion: %.2f, maxCC: %.2f, coupled: %d, verdict: '%s', isDataClass: %b, brainMethods: [%s], lcom4Blocks: %s, churn: %d, recentChurn: %d, lcom4: %.2f, fanOut: %.0f, afferentCoupling: %.0f, instability: %.2f, loc: %.0f, riskScore: %.2f }",
-                        d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, d.className(), d.avgFields(), d.maxCC(),
-                        d.coupledPeers(), d.verdict(), d.isDataClass(),
-                        d.brainMethods().stream().map(s -> "'" + s + "'").collect(Collectors.joining(", ")),
-                        d.lcom4Blocks().stream()
-                                .map(block -> block.stream().map(s -> "'" + s + "'")
-                                        .collect(Collectors.joining(", ", "[", "]")))
-                                .collect(Collectors.joining(", ", "[", "]")),
-                        d.churn(), d.recentChurn(), d.lcom4(),
-                        d.fanOut(), d.afferentCoupling(), d.instability(), d.loc(), d.riskScore()))
-                .collect(Collectors.joining(", ", "[", "]"));
+        return jsonConverter.convertToDataJson(data);
     }
 
     String convertToHierarchyJson(List<AnalysisData> data) {
-        HierarchyNode root = new HierarchyNode("root", "root");
-
-        for (AnalysisData d : data) {
-            String[] parts = d.className().split("/");
-            // Group root-level files to avoid clutter
-            if (parts.length == 1) {
-                parts = new String[] { "Root Files", parts[0] };
-            }
-
-            HierarchyNode current = root;
-
-            // Build/Traverse the tree structure
-            for (int i = 0; i < parts.length; i++) {
-                String part = parts[i];
-                boolean isFile = (i == parts.length - 1);
-                String fullPath = d.className(); // Simplified, conceptually path up to here
-
-                HierarchyNode child = current.findChild(part);
-                if (child == null) {
-                    child = new HierarchyNode(part, isFile ? fullPath : part); // Only leaves need full path really
-                    current.children.add(child);
-                }
-                current = child;
-
-                // If it's a leaf (file), add the data
-                if (isFile) {
-                    current.value = d.loc(); // Size = LOC
-                    current.riskScore = d.riskScore();
-                    current.verdict = d.verdict();
-                    current.complexity = d.totalCC();
-                    current.churn = d.churn();
-                }
-            }
-        }
-        return root.toJson();
-    }
-
-    private static class HierarchyNode {
-        String name;
-        String fullName;
-        List<HierarchyNode> children = new ArrayList<>();
-        Double value; // LOC
-        Double riskScore;
-        Double complexity;
-        Integer churn;
-        String verdict;
-
-        HierarchyNode(String name, String fullName) {
-            this.name = name;
-            this.fullName = fullName;
-        }
-
-        HierarchyNode findChild(String name) {
-            for (HierarchyNode c : children) {
-                if (c.name.equals(name))
-                    return c;
-            }
-            return null;
-        }
-
-        String toJson() {
-            StringBuilder sb = new StringBuilder();
-            sb.append("{");
-            sb.append("\"name\":\"").append(name).append("\"");
-
-            if (!children.isEmpty()) {
-                sb.append(",\"children\":[");
-                sb.append(children.stream().map(HierarchyNode::toJson).collect(Collectors.joining(",")));
-                sb.append("]");
-            } else {
-                // Leaf properties
-                sb.append(",\"value\":").append(value != null ? value : 0);
-                sb.append(",\"riskScore\":").append(riskScore != null ? riskScore : 0);
-                sb.append(",\"complexity\":").append(complexity != null ? complexity : 0);
-                sb.append(",\"churn\":").append(churn != null ? churn : 0);
-                sb.append(",\"verdict\":\"").append(verdict != null ? verdict : "OK").append("\"");
-                sb.append(",\"fullName\":\"").append(fullName != null ? fullName : "").append("\"");
-            }
-            sb.append("}");
-            return sb.toString();
-        }
-    }
-
-    private String convertToNetworkJson(List<AnalysisData> data) {
-        // Only show top 50 riskiest classes to keep graph manageable
-        List<AnalysisData> topRisky = data.stream()
-                .filter(d -> d.coupledPeers() > 0)
-                .sorted((a, b) -> Double.compare(b.riskScore(), a.riskScore()))
-                .limit(50)
-                .collect(Collectors.toList());
-
-        StringBuilder nodes = new StringBuilder("[");
-        StringBuilder links = new StringBuilder("[");
-
-        boolean firstNode = true;
-        Map<String, Integer> nodeIndex = new HashMap<>();
-        Set<String> nodeIds = new HashSet<>();
-        int index = 0;
-
-        for (AnalysisData d : topRisky) {
-            if (!firstNode)
-                nodes.append(",");
-            firstNode = false;
-
-            String shortName = d.className(); // Use full path as requested
-            nodes.append(String.format(
-                    "{\"id\":\"%s\",\"name\":\"%s\",\"riskScore\":%.2f,\"coupled\":%d,\"verdict\":\"%s\"}",
-                    d.className(), shortName, d.riskScore(), d.coupledPeers(), d.verdict()));
-            nodeIndex.put(d.className(), index++);
-            nodeIds.add(d.className());
-        }
-        nodes.append("]");
-
-        // Create links: connect classes based on REAL temporal coupling
-        boolean firstLink = true;
-        for (AnalysisData source : topRisky) {
-            for (String coupledClassName : source.coupledClassNames()) {
-                // Check if coupled class is also in our top risky list (to keep graph connected
-                // and relevant)
-                // or if we want to show it even if it's not "risky" itself?
-                // For simplicity and graph cleanliness, only link if both are in the graph or
-                // if it's one level deep.
-                // Let's stick to linking nodes that exist in our graph.
-
-                if (nodeIds.contains(coupledClassName) && source.className().compareTo(coupledClassName) < 0) {
-                    // Avoid duplicate links (A->B and B->A) by comparing class names
-                    if (!firstLink)
-                        links.append(",");
-                    firstLink = false;
-
-                    links.append(String.format(
-                            "{\"source\":\"%s\",\"target\":\"%s\",\"value\":1}", // Value could be coupling strength if
-                                                                                 // we tracked it per-pair
-                            source.className(), coupledClassName));
-                }
-            }
-        }
-        links.append("]");
-
-        return String.format("{\"nodes\":%s,\"links\":%s}", nodes, links);
+        return jsonConverter.convertToHierarchyJson(data);
     }
 
     private static final String TEMPLATE_HEAD = """
@@ -312,7 +171,7 @@ public class HtmlReporter {
                     /* DataTable - Scrollable with Sticky Header */
                     #table-tab { max-height: 70vh; overflow-y: auto; }
                     table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
-                    th { resize: horizontal; overflow: auto; min-width: 80px; }
+                    th { resize: horizontal; overflow: hidden; min-width: 80px; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
                     th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
                     th:hover { background: #2c3e50; }
@@ -337,9 +196,13 @@ public class HtmlReporter {
                     #detailsPanel.active { display: flex !important; }
                     .panel-header { border-bottom: 2px solid #f0f0f0; padding-bottom: 15px; margin-bottom: 15px; }
                     .panel-header h2 { margin: 0; font-size: 1.2rem; word-break: break-all; color: #34495e; }
+                    code { word-wrap: break-word; white-space: pre-wrap; word-break: break-all; }
+                    .break-all { word-break: break-all; }
                     .verdict-badge { display: inline-block; padding: 5px 10px; border-radius: 4px; color: white; font-weight: bold; font-size: 0.8rem; margin-top: 10px; }
 
                     /* Verdict Colors - Modern Pastel Palette */
+                    .verdict-KNOWLEDGE_ISLAND { background: linear-gradient(135deg, #e74c3c 0%, #9b59b6 100%); }
+                    .verdict-UNTESTED_HOTSPOT { background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%); }
                     .verdict-TOTAL_MESS { background-color: #ff7675; }
                     .verdict-SHOTGUN_SURGERY { background-color: #e17055; }
                     .verdict-BRAIN_METHOD { background-color: #a29bfe; }
@@ -355,9 +218,12 @@ public class HtmlReporter {
                     .verdict-ORCHESTRATOR { background-color: #81ecec; color: #2d3436; }
                     .verdict-OK { background-color: #00b894; }
 
+
                     .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
-                    .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; }
+                    .stat-item { background: #f8f9fa; padding: 10px; border-radius: 4px; text-align: center; position: relative; transition: background 0.2s; }
+                    .stat-item:hover { background: #e8f6f3; cursor: help; }
                     .stat-val { display: block; font-weight: bold; font-size: 1.1rem; color: #2c3e50; }
+
                     .stat-label { font-size: 0.75rem; color: #7f8c8d; text-transform: uppercase; }
 
                     .forensic-report { background: #e8f6f3; padding: 15px; border-left: 4px solid #1abc9c; border-radius: 4px; margin-bottom: 20px; }
@@ -401,184 +267,435 @@ public class HtmlReporter {
             """;
 
     private static String TEMPLATE_BODY_PART1 = """
-                                <body>
-                                    <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
-                                        <div class="main-content">
-                                            <div class="container">
-                                                <h1>Code Forensics: Risk Analysis</h1>
+                                        <body>
+                                            <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
+                                                <div class="main-content">
+                                                    <div class="container">
+                                                        <h1>Code Forensics: Risk Analysis</h1>
 
-                                                <div class="tabs">
-                                                    <button class="tab active" onclick="switchTab('quadrant')">Quadrant View</button>
-                                                    <button class="tab" onclick="switchTab('table')">Data Table</button>
-                                                    <button class="tab" onclick="switchTab('treemap')">System Map</button>
-                                                    <button class="tab" onclick="switchTab('network')">Network</button>
-                                                </div>
+                                                        <div class="tabs">
+                                                            <button id="btn-dashboard" class="tab active" onclick="switchTab('dashboard')">Dashboard</button>
+                                                            <button id="btn-quadrant" class="tab" onclick="switchTab('quadrant')">Quadrant View</button>
+                                                            <button id="btn-table" class="tab" onclick="switchTab('table')">Data Table</button>
+                                                            <button id="btn-treemap" class="tab" onclick="switchTab('treemap')">System Map</button>
+                                                            <button id="btn-network" class="tab" onclick="switchTab('network')">Coupling Graph</button>
+                                                <button id="btn-philosophy" class="tab" onclick="switchTab('philosophy')">Philosophy</button>
 
-                                                <!-- Quadrant Tab -->
-                                                <div id="quadrant-tab" class="tab-content active">
-                                                    <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
-                                                    <div class="chart-container">
-                                                        <canvas id="riskChart"></canvas>
-                                                    </div>
-                                                    <div class="legend">
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
-                                                        <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
-                                                    </div>
-                                                </div>
+                                                        </div>
 
-                                                <!-- Table Tab -->
-                                                <div id="table-tab" class="tab-content">
-                                                    <div class="filter-row">
-                                                        <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
-                                                        <select id="verdictFilter">
-                                                            <option value="">All Verdicts</option>
-                                                            <option value="TOTAL_MESS">TOTAL_MESS</option>
-                                                            <option value="SHOTGUN_SURGERY">SHOTGUN_SURGERY</option>
-                                                            <option value="BRAIN_METHOD">BRAIN_METHOD</option>
-                                                            <option value="GOD_CLASS">GOD_CLASS</option>
-                                                        </select>
-                                                    </div>
-                                                    <table id="dataTable">
-                                                        <thead>
-                                                            <tr>
-                                                                <th onclick="sortTable(0)">Class Name ▼</th>
-                                                                <th onclick="sortTable(1)">Churn ▼</th>
-                                                                <th onclick="sortTable(2)">Recent Churn ▼</th>
-                                                                <th onclick="sortTable(3)">Risk Score ▼</th>
-                                                                <th onclick="sortTable(4)">Complexity ▼</th>
-                                                                <th onclick="sortTable(5)">LCOM4 ▼</th>
-                                                                <th onclick="sortTable(6)">Verdict ▼</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody id="tableBody"></tbody>
-                                                    </table>
-                                                </div>
+                                                        <!-- Dashboard Tab -->
+                                                        <div id="dashboard-tab" class="tab-content active">
+                                                            <div class="stat-grid" style="grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 30px;">
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #3498db; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Total number of source files analyzed">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #2c3e50;" id="kpi-analyzed">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Analyzed Files</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #95a5a6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Files skipped (e.g., tests, generated code)">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #7f8c8d;" id="kpi-skipped">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Skipped (Tests)</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #e74c3c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Average risk score across all analyzed files">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #e74c3c;" id="kpi-risk">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Avg Risk Score</div>
+                                                                </div>
+                                                                <div class="stat-item" style="background: white; border-top: 4px solid #2ecc71; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Total Lines of Code">
+                                                                    <div style="font-size: 2rem; font-weight: bold; color: #27ae60;" id="kpi-loc">-</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Total LOC</div>
+                                                                </div>
+                                                            </div>
 
-                                                <!-- System Map Tab -->
-                                                <div id="treemap-tab" class="tab-content">
-                                                    <div class="row">
-                                                        <div class="col-md-12">
-                                                            <div class="card">
-                                                                <div class="card-header">
-                                                                    <div class="breadcrumbs" id="breadcrumbs">
-                                                                        <span class="crumb active">root</span>
+                                                            <!-- Scan Summary -->
+                                                            <div id="scan-summary" style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; border-left: 5px solid #3498db;">
+                                                                <h3 style="margin-top: 0; color: #2c3e50; font-size: 1.1rem;">📊 Scan Summary</h3>
+                                                                <p id="summary-text" style="color: #34495e; font-size: 1rem; line-height: 1.5; margin: 0;">Loading summary...</p>
+                                                            </div>
+
+
+
+                                                            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                                                                <!-- Verdict Chart -->
+                                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                                                    <h3 style="margin-top: 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">Verdict Distribution</h3>
+                                                                    <div style="height: 300px; position: relative;">
+                                                                        <canvas id="verdictChart"></canvas>
                                                                     </div>
                                                                 </div>
-                                                                <div class="card-body">
-                                                                    <div id="treemap-container">
-                                                                        <div id="loading">Loading visualization...</div>
-                                                                        <svg id="treemap"></svg>
-                                                                        <div id="system-map-hud">
-                                                                            <!-- HUD Content populated by JS -->
-                                                                            <h3>Hover over a file</h3>
-                                                                            <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
-                                                                        </div>
+
+                                                                <!-- Top Risks -->
+                                                                <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+                                                                    <h3 style="margin-top: 0; color: #2c3e50; border-bottom: 1px solid #eee; padding-bottom: 10px;">🔥 Top 5 Risk Files</h3>
+                                                                    <div id="top-risks-list" style="display: flex; flex-direction: column; gap: 10px;">
+                                                                        <!-- Populated by JS -->
                                                                     </div>
                                                                 </div>
                                                             </div>
                                                         </div>
-                                                    </div>
-                                                    <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
-                                                        <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
-                                                    </div>
-                                                    <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
-                                                        👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
-                                                    </div>
-                                                </div>
 
-                                                <!-- Network Tab -->
-                                                <div id="network-tab" class="tab-content">
-                                                    <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
-                                                    <div id="network-container">
-                                                        <svg id="network"></svg>
+                                                        <!-- Quadrant Tab -->
+                                                        <div id="quadrant-tab" class="tab-content">
+                                                            <p><strong>X-Axis:</strong> Churn | <strong>Y-Axis:</strong> Complexity | <strong>Size:</strong> Methods</p>
+                                                            <div class="chart-container">
+                                                                <canvas id="riskChart"></canvas>
+                                                            </div>
+                                                            <div class="legend">
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(231, 76, 60, 0.3);"></div><span>🔴 Burning Platform</span></div>
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(241, 196, 15, 0.3);"></div><span>🟡 Complex but Stable</span></div>
+                                                                <div class="legend-item"><div class="legend-color" style="background: rgba(46, 204, 113, 0.3);"></div><span>🟢 Healthy</span></div>
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Table Tab -->
+                                                        <div id="table-tab" class="tab-content">
+                                                            <div class="filter-row">
+                                                                <input type="text" id="classFilter" placeholder="Filter by class name..." style="flex: 1;">
+                                                                <select id="verdictFilter">
+                                                                    <option value="">All Verdicts</option>
+                                                                </select>
+                                                            </div>
+                                                            <table id="dataTable">
+                                                                <thead>
+                                                                    <tr>
+                                                                        <th onclick="sortTable(0)">Class Name ▼</th>
+                                                                        <th onclick="sortTable(1)">Churn ▼</th>
+                                                                        <th onclick="sortTable(2)">Recent Churn ▼</th>
+                                                                        <th onclick="sortTable(3)">Risk Score ▼</th>
+                                                                        <th onclick="sortTable(4)">Complexity ▼</th>
+                                                                        <th onclick="sortTable(5)">LCOM4 ▼</th>
+                                                                        <th onclick="sortTable(6)">Verdict ▼</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody id="tableBody"></tbody>
+                                                            </table>
+                                                        </div>
+
+                                                        <!-- System Map Tab -->
+                                                        <div id="treemap-tab" class="tab-content">
+                                                            <div class="row">
+                                                                <div class="col-md-12">
+                                                                    <div class="card">
+                                                                        <div class="card-header">
+                                                                            <div class="breadcrumbs" id="breadcrumbs">
+                                                                                <span class="crumb active">root</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div class="card-body">
+                                                                            <div id="treemap-container">
+                                                                                <div id="loading">Loading visualization...</div>
+                                                                                <svg id="treemap"></svg>
+                                                                                <div id="system-map-hud">
+                                                                                    <!-- HUD Content populated by JS -->
+                                                                                    <h3>Hover over a file</h3>
+                                                                                    <div class="hud-row"><span class="hud-label">Select a node to see details</span></div>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            <div style="margin-bottom: 2px; font-size: 0.9rem; color: #7f8c8d;">
+                                                                <strong>Circle Size:</strong> Lines of Code | <strong>Color:</strong> Risk Score
+                                                            </div>
+                                                            <div style="margin-bottom: 10px; font-size: 0.85rem; color: #95a5a6; font-style: italic;">
+                                                                👉 <strong>Click Folder</strong> to Zoom In | <strong>Click File</strong> for Details | <strong>Click Background</strong> to Zoom Out
+                                                            </div>
+                                                        </div>
+
+                                                        <!-- Network Tab -->
+                                                        <div id="network-tab" class="tab-content">
+                                                            <p><strong>Nodes:</strong> Classes with coupling | <strong>Size:</strong> Risk Score | <strong>Color:</strong> Verdict</p>
+                                                            <div id="network-container">
+                                                                <svg id="network"></svg>
+                                                            </div>
+                                                        </div>
+
+                                            <!-- Philosophy Tab -->
+                                            <div id="philosophy-tab" class="tab-content">
+                                                <div style="max-width: 900px; margin: 0 auto; padding: 20px;">
+                                                    <div style="text-align: center; margin-bottom: 40px;">
+                                                        <h2 style="color: #2c3e50; font-size: 2rem; margin-bottom: 10px;">The Philosophy of Code Panopticon</h2>
+                                                        <p style="font-size: 1.1rem; color: #7f8c8d; font-style: italic;">
+                                                            &ldquo;Code&mdash;whether written by humans or generated by AI&mdash;is maintained by humans. To understand code, you must understand its history.&rdquo;
+                                                        </p>
                                                     </div>
+
+                                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px;">
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3498db;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">📐</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Structure</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Complexity, Cohesion, Coupling. How hard is the code to understand?</p>
+                                                        </div>
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #e67e22;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">⏱️</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Evolution</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Churn, Hotspots, Coupling. How is the code changing over time?</p>
+                                                        </div>
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #2ecc71;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">👥</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Social</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Knowledge Islands, Bus Factor. Who owns this code?</p>
+                                                        </div>
+                                                    </div>
+
+                                                    <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Hotspot Metrics</h3>
+                                                    <table style="width: 100%; border-collapse: collapse; margin-bottom: 40px; background: white; box-shadow: 0 2px 4px rgba(0,0,0,0.05);">
+                                                        <thead>
+                                                            <tr style="border-bottom: 2px solid #ddd;">
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Metric</th>
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Meaning</th>
+                                                                <th style="background: #f8f9fa; padding: 12px; text-align: left; color: #2c3e50;">Why It Matters</th>
+                                                            </tr>
+
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Churn</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Total commits touching the file</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High churn = High maintenance cost.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Complexity (CC)</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Cyclomatic Complexity</td><td style="padding: 12px; border-bottom: 1px solid #eee;">Hard to test, harder to reason about.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>LCOM4</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Lack of Cohesion</td><td style="padding: 12px; border-bottom: 1px solid #eee;">LCOM4 &gt; 1 means the class does too many things.</td></tr>
+                                                            <tr><td style="padding: 12px; border-bottom: 1px solid #eee;"><strong>Fan-Out</strong></td><td style="padding: 12px; border-bottom: 1px solid #eee;">Outgoing dependencies</td><td style="padding: 12px; border-bottom: 1px solid #eee;">High coupling makes code fragile.</td></tr>
+                                                        </tbody>
+                                                    </table>
+
+                                                     <h3 style="border-bottom: 2px solid #eee; padding-bottom: 10px; margin-bottom: 20px; color: #2c3e50;">Verdict Decoder</h3>
+                                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                                                        <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
+                                                            <strong style="color: #c0392b;">TOTAL_MESS</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">High Complexity + High Churn. The burning platform. Refactor immediately.</p>
+                                                        </div>
+                                                        <div style="background: #fff5f5; padding: 15px; border-radius: 6px; border-left: 4px solid #e74c3c;">
+                                                            <strong style="color: #c0392b;">KNOWLEDGE_ISLAND</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Maintained by a single person who is inactive. Critical organizational risk.</p>
+                                                        </div>
+                                                        <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
+                                                            <strong style="color: #d35400;">GOD_CLASS</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Knows too much, does too much. Split responsibilities.</p>
+                                                        </div>
+                                                         <div style="background: #fff8e1; padding: 15px; border-radius: 6px; border-left: 4px solid #f1c40f;">
+                                                            <strong style="color: #d35400;">UNTESTED_HOTSPOT</strong>
+                                                            <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Complex and changing, but no tests found. Danger zone.</p>
+                                                        </div>
+                                                     </div>
+
+                                                     <div style="margin-top: 40px; background: #e8f6f3; padding: 20px; border-radius: 8px; text-align: center;">
+                                                        <h3 style="margin-top: 0; color: #16a085;">The Panopticon Rule</h3>
+                                                        <p style="font-size: 1.1rem; color: #2c3e50; font-weight: bold;">&ldquo;Complexity is only a problem if we have to work with it.&rdquo;</p>
+                                                        <p style="color: #7f8c8d;">Don't fix stable code. Fix the Hotspots.</p>
+                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
 
-                                        <div id="detailsPanel">
-                                            <button class="close-btn" onclick="hideDetails()">&times;</button>
-                                            <div id="panelContent"></div>
-                                        </div>
-                                    </div>
+                                                    </div>
+                                                </div>
 
-                                    <script>
-                                        const rawData = {{DATA_PLACEHOLDER}};
-                                        const treemapData = {{TREEMAP_DATA}};
-                                        const networkData = {{NETWORK_DATA}};
-                                        let currentSort = { column: 3, ascending: false };
+                                                <div id="detailsPanel">
+                                                    <button class="close-btn" onclick="hideDetails()">&times;</button>
+                                                    <div id="panelContent"></div>
+                                                </div>
+                                            </div>
 
-                                        // Fix: Hide loading overlay immediately as data is embedded
-                                        try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
+                                            <script>
+                                                const stats = {{STATS_PLACEHOLDER}};
+                                                const rawData = {{DATA_PLACEHOLDER}};
 
-                                        // Tab switching
-                                        function switchTab(tabName) {
-                                            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-                                            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+                                                const treemapData = {{TREEMAP_DATA}};
+                                                const networkData = {{NETWORK_DATA}};
+                                                let currentSort = { column: 3, ascending: false };
 
-                                            event.target.classList.add('active');
-                                            document.getElementById(tabName + '-tab').classList.add('active');
+                                                // Populate verdict filter dynamically
+                                                try {
+                                                    const uniqueVerdicts = [...new Set(rawData.map(d => d.verdict))].filter(v => v).sort();
+                                                    const filterSelect = document.getElementById('verdictFilter');
+                                                    if (filterSelect) {
+                                                        uniqueVerdicts.forEach(v => {
+                                                            const option = document.createElement('option');
+                                                            option.value = v;
+                                                            option.textContent = v;
+                                                            filterSelect.appendChild(option);
+                                                        });
+                                                    }
+                                                } catch (e) { console.error("Error populating filter", e); }
 
-                                            if (tabName === 'table') renderTable();
-                                            if (tabName === 'treemap') renderTreemap();
-                                            if (tabName === 'network') renderNetwork();
-                                        }
 
-                                        const getColor = (riskScore) => {
-                                            // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
-                                            if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
-                                            if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
-                                            return 'rgba(46, 204, 113, 0.7)'; // Green
-                                        };
 
-                                        const getRiskColor = (d) => {
-                                            // Use Verdict for explicit coloring if available
-                                            const v = d.verdict;
-                                            if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
-                                            if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+                                                // Fix: Hide loading overlay immediately as data is embedded
+                                                try { document.getElementById('loading').style.display = 'none'; } catch(e) {}
 
-                                            // Fallback to numeric risk score
-                                            const score = d.riskScore || 0;
-                                            if (score > 20) return '#e74c3c';
-                                            if (score > 5) return '#f39c12';
-                                            return '#27ae60'; // Green
-                                        };
+                                                // Tab switching
+                                                function switchTab(tabName) {
+                                                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                                                    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
 
-                                        // Quadrant Chart with Dynamic Axis Scaling
-                                        const ctx = document.getElementById('riskChart').getContext('2d');
+                                                    const btn = document.getElementById('btn-' + tabName);
+                                                    if (btn) btn.classList.add('active');
 
-                                        // Calculate dynamic axis bounds based on data
-                                        const maxChurn = Math.max(...rawData.map(d => d.x), 10);
-                                        const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
-                                        const xAxisMax = Math.ceil(maxChurn * 1.2);
-                                        const yAxisMax = Math.ceil(maxComplexity * 1.1);
+                                                    const content = document.getElementById(tabName + '-tab');
+                                                    if (content) content.classList.add('active');
 
-                                        // Calculate percentile-based dividers (75th percentile)
-                                        const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
-                                        const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
-                                        const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
-                                        const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+                                                    if (tabName === 'table') renderTable();
+                                                    if (tabName === 'treemap') renderTreemap();
+                                                    if (tabName === 'network') renderNetwork();
+                                                }
 
-                                        const backgroundZones = {
-                                            id: 'backgroundZones',
-                                            beforeDraw: (chart) => {
-                                                const ctx = chart.ctx;
-                                                const chartArea = chart.chartArea;
-                                                const xScale = chart.scales.x;
-                                                const yScale = chart.scales.y;
-                                                const xMid = xScale.getPixelForValue(churnDivider);
-                                                const yMid = yScale.getPixelForValue(complexityDivider);
-                                                ctx.save();
-                                                ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
-                                                ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
-                                                ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
-                                                ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
-                                                ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
-                                                ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
-                                                ctx.restore();
-                                            }
-                                        };
+                                                const getColor = (riskScore) => {
+                                                    // Keep distinct from getRiskColor if needed for bubble chart, merging logic for consistency
+                                                    if (riskScore > 20) return 'rgba(231, 76, 60, 0.7)'; // Red
+                                                    if (riskScore > 5) return 'rgba(241, 196, 15, 0.7)';  // Yellow
+                                                    return 'rgba(46, 204, 113, 0.7)'; // Green
+                                                };
+
+                                                const getRiskColor = (d) => {
+                                                    // Use Verdict for explicit coloring if available
+                                                    const v = d.verdict;
+                                                    if (v === 'TOTAL_MESS' || v === 'GOD_CLASS' || v === 'BLOATED' || v === 'SHOTGUN_SURGERY') return '#e74c3c'; // Red
+                                                    if (v === 'BRAIN_METHOD' || v === 'COMPLEX' || v === 'SPLIT_CANDIDATE' || v === 'HIGH_COUPLING' || v === 'HIDDEN_DEPENDENCY') return '#f39c12'; // Orange
+
+                                                    // Fallback to numeric risk score
+                                                    const score = d.riskScore || 0;
+                                                    if (score > 20) return '#e74c3c';
+                                                    if (score > 5) return '#f39c12';
+                                                    return '#27ae60'; // Green
+                                                };
+
+                                                // Dashboard Init
+                                                function initDashboard() {
+                                                    // KPIs
+                                                    document.getElementById('kpi-analyzed').textContent = stats.analyzed;
+                                                    document.getElementById('kpi-skipped').textContent = stats.skipped;
+                                                    const avgRisk = rawData.reduce((sum, d) => sum + d.riskScore, 0) / (rawData.length || 1);
+                                                    document.getElementById('kpi-risk').textContent = avgRisk.toFixed(1);
+                                                    const totalLoc = rawData.reduce((sum, d) => sum + d.loc, 0);
+                                                    document.getElementById('kpi-loc').textContent = totalLoc.toLocaleString();
+
+                                                    // Scan Summary
+                                                    const highRisks = rawData.filter(d => d.riskScore > 5).sort((a,b) => b.riskScore - a.riskScore);
+                                                    const highRiskCount = highRisks.length;
+                                                    const primaryLang = [...new Set(rawData.map(d => d.language || 'generic'))].sort((a,b) =>
+                                                        rawData.filter(d => d.language === b).length - rawData.filter(d => d.language === a).length
+                                                    )[0] || 'Generic'; // Mode language
+
+                                                    let hotspotDetail = "";
+                                                    if (highRiskCount === 0) {
+                                                        hotspotDetail = "Great work! No significant hotspots found.";
+                                                    } else if (highRiskCount <= 3) {
+                                                        const names = highRisks.map(d => `<code>${d.label}</code>`).join(', ');
+                                                        hotspotDetail = `The hotspots are: ${names}.`;
+                                                    } else {
+                                                        hotspotDetail = `The highest risk file is <code>${highRisks[0].label}</code> (Risk: ${highRisks[0].riskScore.toFixed(1)}).`;
+                                                    }
+
+                                                    const summaryText = `
+                                                        scanned <strong>${stats.analyzed} files</strong> (skipped ${stats.skipped} test files).
+                                                        The codebase is primarily <strong>${primaryLang}</strong>.
+                                                        We found <strong>${highRiskCount} hotspots</strong> (Risk Score > 5) that require attention.
+                                                        ${hotspotDetail}
+                                                    `;
+                                                    document.getElementById('summary-text').innerHTML = summaryText;
+
+
+                                                    // Top Risks
+                                                    const topRisks = [...rawData].sort((a, b) => b.riskScore - a.riskScore).slice(0, 5);
+                                                    const list = document.getElementById('top-risks-list');
+                                                    list.innerHTML = ''; // Clear existing
+                                                    topRisks.forEach((d, i) => {
+                                                        const item = document.createElement('div');
+                                                        const riskColor = getRiskColor(d);
+                                                        item.style.cssText = "display: flex; align-items: center; padding: 12px; background: #fff; border-bottom: 1px solid #eee; transition: background 0.2s; min-width: 0;";
+                                                        item.onmouseover = () => item.style.background = '#f9f9f9';
+                                                        item.onmouseout = () => item.style.background = '#fff';
+
+                                                        item.innerHTML = `
+                                                            <div style="font-weight: bold; color: #95a5a6; width: 30px; font-size: 1.1rem; flex-shrink: 0;">${i+1}.</div>
+                                                            <div style="flex: 1; overflow: hidden; padding-right: 10px; min-width: 0;">
+                                                                <div style="font-family: monospace; font-size: 0.95rem; color: #2c3e50; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="${d.label}">${d.label}</div>
+                                                            </div>
+                                                            <div style="text-align: right; min-width: 140px;">
+                                                                <span style="font-weight: bold; color: ${riskColor};">Risk: ${d.riskScore.toFixed(1)}</span>
+                                                                <span style="font-size: 0.8rem; background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${d.verdict}</span>
+                                                            </div>
+                                                        `;
+                                                        list.appendChild(item);
+                                                    });
+
+                                                    // Verdict Chart
+                                                    if (typeof Chart !== 'undefined') {
+                                                        const verdictCounts = {};
+                                                        rawData.forEach(d => { verdictCounts[d.verdict] = (verdictCounts[d.verdict] || 0) + 1; });
+                                                        const verdictLabels = Object.keys(verdictCounts);
+                                                        const verdictValues = Object.values(verdictCounts);
+
+                                                        new Chart(document.getElementById('verdictChart'), {
+                                                            type: 'doughnut',
+                                                            data: {
+                                                                labels: verdictLabels,
+                                                                datasets: [{
+                                                                    data: verdictValues,
+                                                                    backgroundColor: verdictLabels.map(v => {
+                                                                        const d = {verdict: v}; // Mock for color function
+                                                                        return getRiskColor(d);
+                                                                    })
+                                                                }]
+                                                            },
+                                                            options: {
+                                                                responsive: true,
+                                                                maintainAspectRatio: false,
+                                                                plugins: {
+                                                                    legend: { position: 'right' }
+                                                                },
+                                                                onClick: (e, elements) => {
+                                                                    if (elements.length > 0) {
+                                                                        const index = elements[0].index;
+                                                                        const verdict = verdictLabels[index];
+                                                                        // Filter table by verdict and switch tab
+                                                                        const filterSelect = document.getElementById('verdictFilter');
+                                                                        if(filterSelect) filterSelect.value = verdict;
+                                                                        switchTab('table');
+                                                                        // Trigger change event if needed for table filter
+                                                                        filterSelect.dispatchEvent(new Event('change'));
+                                                                    }
+                                                                }
+                                                            }
+                                                        });
+                                                    } else {
+                                                        document.getElementById('verdictChart').parentElement.innerHTML = '<div style="padding: 20px; text-align: center; color: #e74c3c;">Chart.js failed to load. Please check internet connection.</div>';
+                                                    }
+                                                }
+
+                                                // Run init - AFTER helpers are defined
+                                                try { initDashboard(); } catch(e) { console.error("Dashboard init error", e); }
+
+                                                const ctx = document.getElementById('riskChart').getContext('2d');
+
+                                                // Calculate dynamic axis bounds based on data
+                                                const maxChurn = Math.max(...rawData.map(d => d.x), 10);
+                                                const maxComplexity = Math.max(...rawData.map(d => d.y), 100);
+                                                const xAxisMax = Math.ceil(maxChurn * 1.2);
+                                                const yAxisMax = Math.ceil(maxComplexity * 1.1);
+
+                                                // Calculate percentile-based dividers (75th percentile)
+                                                const sortedChurn = [...rawData.map(d => d.x)].sort((a, b) => a - b);
+                                                const sortedComplexity = [...rawData.map(d => d.y)].sort((a, b) => a - b);
+                                                const churnDivider = sortedChurn[Math.floor(sortedChurn.length * 0.75)] || 10;
+                                                const complexityDivider = sortedComplexity[Math.floor(sortedComplexity.length * 0.5)] || 50;
+
+                                                const backgroundZones = {
+                                                    id: 'backgroundZones',
+                                                    beforeDraw: (chart) => {
+                                                        const ctx = chart.ctx;
+                                                        const chartArea = chart.chartArea;
+                                                        const xScale = chart.scales.x;
+                                                        const yScale = chart.scales.y;
+                                                        const xMid = xScale.getPixelForValue(churnDivider);
+                                                        const yMid = yScale.getPixelForValue(complexityDivider);
+                                                        ctx.save();
+                                                        ctx.fillStyle = 'rgba(231, 76, 60, 0.1)';
+                                                        ctx.fillRect(xMid, chartArea.top, chartArea.right - xMid, yMid - chartArea.top);
+                                                        ctx.fillStyle = 'rgba(241, 196, 15, 0.1)';
+                                                        ctx.fillRect(chartArea.left, chartArea.top, xMid - chartArea.left, yMid - chartArea.top);
+                                                        ctx.fillStyle = 'rgba(46, 204, 113, 0.1)';
+                                                        ctx.fillRect(chartArea.left, yMid, chartArea.right - chartArea.left, chartArea.bottom - yMid);
+                                                        ctx.restore();
+                                                    }
+                                                };
+            """;
+    private static String TEMPLATE_BODY_PART1_B = """
 
                                         const chart = new Chart(ctx, {
                                             type: 'bubble',
@@ -628,11 +745,55 @@ public class HtmlReporter {
                                             const panel = document.getElementById('detailsPanel');
                                             panel.classList.add('active');
                                             const content = document.getElementById('panelContent');
+
+                                            // Social forensics section (only if we have data)
+                                            let socialSection = '';
+                                            if (d.authorCount && d.authorCount > 0) {
+                                                const busFactor = d.busFactor || 1;
+                                                const busFactorEmoji = busFactor === 1 ? '🚨' : (busFactor <= 2 ? '⚠️' : '✅');
+                                                const busFactorColor = busFactor === 1 ? '#e74c3c' : (busFactor <= 2 ? '#f39c12' : '#27ae60');
+
+                                                // Calculate bar width for primary author
+                                                const primaryPct = d.primaryAuthorPercentage || 0;
+
+                                                socialSection = `
+                                                    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                                        <h3 style="margin: 0 0 12px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                                                            <span style="font-size: 1.2rem;">👥</span> Social Forensics
+                                                        </h3>
+
+                                                        <div style="display: flex; justify-content: space-between; margin-bottom: 10px;">
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${busFactorEmoji} ${busFactor}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">BUS FACTOR</div>
+                                                            </div>
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${d.authorCount}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">AUTHORS</div>
+                                                            </div>
+                                                            <div style="text-align: center; flex: 1;">
+                                                                <div style="font-size: 1.5rem; font-weight: bold;">${d.daysSinceLastCommit >= 0 ? d.daysSinceLastCommit + 'd' : '?'}</div>
+                                                                <div style="font-size: 0.7rem; opacity: 0.8;">LAST COMMIT</div>
+                                                            </div>
+                                                        </div>
+
+                                                        <div style="background: rgba(255,255,255,0.1); padding: 10px; border-radius: 6px; margin-top: 10px;">
+                                                            <div style="font-size: 0.75rem; margin-bottom: 5px; opacity: 0.9;">Primary Author: <strong>${d.primaryAuthor || 'unknown'}</strong></div>
+                                                            <div style="background: rgba(255,255,255,0.2); border-radius: 4px; height: 8px; overflow: hidden;">
+                                                                <div style="background: ${busFactorColor}; width: ${primaryPct}%; height: 100%; transition: width 0.3s;"></div>
+                                                            </div>
+                                                            <div style="font-size: 0.65rem; margin-top: 3px; opacity: 0.7;">${primaryPct.toFixed(0)}% of code by primary author</div>
+                                                        </div>
+                                                    </div>
+                                                `;
+                                            }
+
                                             content.innerHTML = `
                                                 <div class="panel-header">
                                                     <h2>${d.label}</h2>
                                                     <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
                                                 </div>
+                                                ${socialSection}
                                                 <div class="stat-grid">
                                                     <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
                                                     <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
@@ -645,15 +806,18 @@ public class HtmlReporter {
                                                     <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
                                                     <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
                                                 </div>
+                                                ${d.isKnowledgeIsland ? `<div class="forensic-report" style="background: #fff5f5; border-left-color: #e74c3c;"><h3 style="color: #e74c3c;">🚨 Knowledge Island Detected</h3><p>This file is <strong>primarily maintained by one developer who has been inactive for 90+ days</strong>. This represents a critical organizational risk. Consider scheduling a knowledge transfer session before making any changes.</p></div>` : ''}
                                                 ${d.isDataClass ? `<div class="forensic-report"><h3>Data Class Detected</h3><p>This class primarily holds data and lacks significant behavior. Consider encapsulating behavior or refactoring into a more active role.</p></div>` : ''}
                                                 ${d.brainMethods.length > 0 ? `<div class="forensic-report"><h3>Brain Method(s) Detected</h3><p>Methods like <strong>${d.brainMethods.join(', ')}</strong> exhibit high complexity and/or high churn, indicating they are central to the class's complexity and change. Consider refactoring these methods.</p></div>` : ''}
                                                 ${d.lcom4Blocks.length > 1 ? `<div class="forensic-report"><h3>Low Cohesion (LCOM4)</h3><p>This class has ${d.lcom4Blocks.length} distinct groups of methods accessing different sets of fields, suggesting it might be doing too many things. Consider splitting it into multiple, more cohesive classes.</p></div>` : ''}
+                                                ${d.verdict === 'KNOWLEDGE_ISLAND' ? `<div class="forensic-report" style="background: #fff5f5; border-left-color: #e74c3c;"><h3 style="color: #e74c3c;">🚨 Knowledge Island</h3><p><strong>STOP: Do not refactor without knowledge transfer first.</strong><br><br>This file is owned by a single expert who is no longer active. Before touching this code:<br>1. Find the original author (${d.primaryAuthor})<br>2. Schedule a code walkthrough<br>3. Document tribal knowledge<br>4. Then proceed with caution.</p></div>` : ''}
                                                 ${d.verdict === 'GOD_CLASS' ? `<div class="forensic-report"><h3>God Class Detected</h3><p>This class is highly complex, has many responsibilities, and is central to many changes. It's a prime candidate for refactoring to improve maintainability.</p></div>` : ''}
                                                 ${d.verdict === 'TOTAL_MESS' ? `<div class="forensic-report"><h3>Total Mess Detected</h3><p>This class is a severe hotspot, exhibiting high churn, complexity, and coupling. It requires immediate attention and significant refactoring.</p></div>` : ''}
                                                 ${d.verdict === 'SHOTGUN_SURGERY' ? `<div class="forensic-report"><h3>Shotgun Surgery Candidate</h3><p>This class is frequently changed alongside many other classes, suggesting that a single conceptual change requires modifications across many places. Consider consolidating related responsibilities.</p></div>` : ''}
                                                 ${d.verdict === 'HIGH_COUPLING' ? `<div class="forensic-report"><h3>High Coupling Detected</h3><p>This class is highly coupled to ${d.coupled} other classes, making it hard to change in isolation. Look for opportunities to reduce dependencies.</p></div>` : ''}
                                                 ${d.verdict === 'COMPLEX' ? `<div class="forensic-report"><h3>Complex Class Detected</h3><p>This class has high cyclomatic complexity, making it hard to understand and test. Consider breaking down complex methods or responsibilities.</p></div>` : ''}
                                                 ${d.verdict === 'HIDDEN_DEPENDENCY' ? `<div class="forensic-report"><h3>Hidden Dependency Detected</h3><p>This class frequently changes with other classes, indicating a temporal coupling that might not be obvious from the code structure. Consider making the dependency explicit or refactoring to reduce it.</p></div>` : ''}
+                                                ${d.verdict === 'BLOATED' ? `<div class="forensic-report"><h3>Bloated File Detected</h3><p>This file has ${d.loc.toFixed(0)} lines of code, which is above the recommended threshold. Consider splitting into smaller, focused modules to improve maintainability.</p></div>` : ''}
                                                 <div class="tips">
                                                     <h4>Tips for Improvement:</h4>
                                                     <ul>
@@ -665,6 +829,7 @@ public class HtmlReporter {
                                                 </div>
                                             `;
                                         }
+
 
                                         function hideDetails() {
                                             document.getElementById('detailsPanel').classList.remove('active');
@@ -1092,8 +1257,18 @@ public class HtmlReporter {
                 const g = svg.append('g');
                 const zoomBehavior = d3.zoom()
                     .extent([[0, 0], [width, height]])
-                    .scaleExtent([0.1, 4])
-                    .on('zoom', (event) => g.attr('transform', event.transform));
+                    .scaleExtent([0.1, 6])
+                    .on('zoom', (event) => {
+                         g.attr('transform', event.transform);
+                         // Semantic Zoom: Show more labels as we zoom in
+                         const k = event.transform.k;
+                         d3.selectAll('.node-label').transition().duration(200).style('opacity', d => {
+                             if (d.pinned || d.riskScore >= 20) return 1; // Always show pinned or high risk
+                             if (k > 2.5) return 1; // Show all at high zoom
+                             if (k > 1.2 && d.riskScore >= 10) return 1; // Show medium risk at slight zoom
+                             return 0; // Hide low risk when zoomed out
+                         });
+                    });
 
                 svg.call(zoomBehavior)
                     .on('click', (event) => {
@@ -1106,10 +1281,10 @@ public class HtmlReporter {
                                 });
 
                             const simulation = d3.forceSimulation(networkData.nodes)
-                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(100))
-                                .force('charge', d3.forceManyBody().strength(-300))
+                                .force('link', d3.forceLink(networkData.links).id(d => d.id).distance(150))
+                                .force('charge', d3.forceManyBody().strength(-800))
                                 .force('center', d3.forceCenter(width / 2, height / 2))
-                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 2 + 10));
+                                .force('collision', d3.forceCollide().radius(d => Math.sqrt(d.riskScore) * 3 + 15).iterations(2));
 
                             const link = g.append('g')
                                 .attr('class', 'links')
@@ -1297,7 +1472,7 @@ public class HtmlReporter {
                                 .style('opacity', n => connectedNodes.has(n.id) ? 1 : 0.2);
                         });
 
-                    // Add text label - ALL labels visible
+                    // Add text label - Smart visibility
                     nodeGroup.append('text')
                         .text(d => {
                             const parts = d.name.split('/');
@@ -1309,7 +1484,8 @@ public class HtmlReporter {
                         .style('font-size', d => Math.max(9, Math.sqrt(d.riskScore) + 6) + 'px') // Dynamic font size
                         .style('font-weight', 'bold')
                         .style('fill', '#2c3e50') // Corrected property
-                        .style('opacity', 1) // Force 100% visibility
+                        // Default hidden unless high risk
+                        .style('opacity', d => d.riskScore >= 20 ? 1 : 0)
                         .style('pointer-events', 'none')
                         .style('paint-order', 'stroke')
                         .style('stroke', 'rgba(255,255,255,0.95)')
@@ -1352,6 +1528,8 @@ public class HtmlReporter {
                     function diagnose(d) {
                         // Core verdicts from ForensicRuleEngine
                         if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic into a single module" };
+                        if (d.verdict === 'KNOWLEDGE_ISLAND') return { title: "🏝️ Knowledge Island", desc: "Single Active Maintainer", why: "Bus Factor = 1. High dependency on one author.", fix: "Pair programming, code walkthroughs, and having others touch this file." };
+                        if (d.verdict === 'UNTESTED_HOTSPOT') return { title: "🔥 Untested Hotspot", desc: "High Risk + No Tests", why: "High Churn & Complexity with 0 tests.", fix: "Write characterization tests BEFORE making any changes." };
                         if (d.verdict === 'HIDDEN_DEPENDENCY') return { title: "Hidden Dependency", desc: "Temporal coupling without code link", why: `Changes with ${d.coupled} files but only ${d.fanOut} imports`, fix: "Make dependencies explicit via imports or extract shared logic" };
                         if (d.verdict.startsWith('GOD_CLASS')) return { title: "God Class", desc: "Too many responsibilities", why: `Total CC ${d.y}, Fan-out ${d.fanOut}`, fix: "Full decomposition required" };
                         if (d.verdict === 'TOTAL_MESS') return { title: "Kitchen Sink", desc: "No clear responsibility", why: `LCOM4 = ${d.lcom4.toFixed(1)}`, fix: "Split the class by responsibility" };
@@ -1447,11 +1625,65 @@ public class HtmlReporter {
                         }
 
                         // 5. Check GOD Class
-                         if (d.y > 100 && d.lcom4 > 2) { // d.y is Total CC
+                         if (d.verdict.includes('GOD_CLASS') || (d.y > 100 && d.lcom4 > 2)) {
                             steps.push({
                                 icon: '⛪',
                                 title: 'Decompose God Class',
-                                desc: `This class is too big and complex. Stop adding features here. Refactor strictly.`
+                                desc: `This class is too big and complex (Verdict: ${d.verdict}). Stop adding features here. Refactor strictly.`
+                            });
+                        }
+
+                        // 6. Check High Static Coupling (Fan-Out)
+                        if (d.fanOut > 30 || d.verdict === 'HIGH_COUPLING' || d.verdict === 'FRAGILE_HUB') {
+                             steps.push({
+                                icon: '🕸️',
+                                title: 'Detach Dependencies',
+                                desc: `Fan-Out is ${d.fanOut.toFixed(0)}. Use Dependency Injection or Facades to decouple.`
+                            });
+                        }
+
+                        // 7. Check Knowledge Island
+                        if (d.isKnowledgeIsland || d.verdict === 'KNOWLEDGE_ISLAND') {
+                            steps.push({
+                                icon: '🏝️',
+                                title: 'Knowledge Transfer',
+                                desc: `Bus Factor = 1. Schedule code walkthroughs with the primary author (${d.primaryAuthor}) immediately.`
+                            });
+                        }
+
+                        // 8. Check Untested Hotspot
+                        if (d.verdict === 'UNTESTED_HOTSPOT') {
+                            steps.push({
+                                icon: '🛡️',
+                                title: 'Add Safety Net',
+                                desc: 'High risk code with NO tests. Write characterization tests before touching this code.'
+                            });
+                        }
+
+                        // 9. Check Hidden Dependency
+                        if (d.verdict === 'HIDDEN_DEPENDENCY') {
+                            steps.push({
+                                icon: '👻',
+                                title: 'Expose Dependencies',
+                                desc: `Code changes with ${d.coupled} other files but lacks imports. Make these dependencies explicit.`
+                            });
+                        }
+
+                        // 10. Check Complexity (MaxCC)
+                        if (d.verdict.startsWith('COMPLEX') || d.maxCC > 15) {
+                            steps.push({
+                                icon: '🌀',
+                                title: 'Reduce Cyclomatic Complexity',
+                                desc: `Max CC is ${d.maxCC}. Simplify conditional logic and extract methods.`
+                            });
+                        }
+
+                        // 11. Check Bloated
+                        if (d.verdict === 'BLOATED') {
+                            steps.push({
+                                icon: '🐡',
+                                title: 'Decompose Large File',
+                                desc: `File has ${d.loc} LOC. Split responsibilities into smaller files.`
                             });
                         }
 
@@ -1469,11 +1701,168 @@ public class HtmlReporter {
                         const content = document.getElementById('panelContent');
                         const badgeClass = `verdict-${d.verdict.split(' ')[0]}`;
 
+                        // Social forensics section (only if we have data)
+                        let socialSection = '';
+                        if (d.authorCount && d.authorCount > 0) {
+                            const busFactor = d.busFactor || 1;
+                            const busFactorEmoji = busFactor === 1 ? '🚨' : (busFactor <= 2 ? '⚠️' : '✅');
+                            const busFactorColor = busFactor === 1 ? '#e74c3c' : (busFactor <= 2 ? '#f39c12' : '#27ae60');
+                            const primaryPct = d.primaryAuthorPercentage || 0;
+                            // Truncate email for display
+                            const displayAuthor = d.primaryAuthor ? (d.primaryAuthor.length > 25 ? d.primaryAuthor.substring(0, 22) + '...' : d.primaryAuthor) : 'unknown';
+
+                            socialSection = `
+                                <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                    <h3 style="margin: 0 0 15px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px;">
+                                        <span>👥</span> Social Forensics
+                                    </h3>
+                                    <div style="display: flex; justify-content: space-around; align-items: flex-start; text-align: center;">
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4; display: flex; align-items: center; justify-content: center; gap: 4px;">
+                                                <span style="font-size: 1rem;">${busFactorEmoji}</span><span>${busFactor}</span>
+                                            </div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Bus Factor</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4;">${d.authorCount}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Authors</div>
+                                        </div>
+                                        <div style="flex: 1;">
+                                            <div style="font-size: 1.3rem; font-weight: bold; line-height: 1.4;">${d.daysSinceLastCommit >= 0 ? d.daysSinceLastCommit + 'd' : '—'}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.8; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px;">Last Commit</div>
+                                        </div>
+                                    </div>
+                                    <div style="background: rgba(255,255,255,0.15); padding: 10px; border-radius: 6px; margin-top: 12px;">
+                                        <div style="font-size: 0.75rem; margin-bottom: 6px; opacity: 0.9;" title="${d.primaryAuthor || 'unknown'}">Primary: <strong>${displayAuthor}</strong></div>
+                                        <div style="background: rgba(255,255,255,0.2); border-radius: 4px; height: 6px; overflow: hidden;">
+                                            <div style="background: ${busFactorColor}; width: ${primaryPct}%; height: 100%;"></div>
+                                        </div>
+                                        <div style="font-size: 0.6rem; margin-top: 4px; opacity: 0.7;">${primaryPct.toFixed(0)}% of code</div>
+                                    </div>
+                                </div>
+                            `;
+
+                        }
+
+                        // Knowledge island warning
+                        let islandWarning = '';
+                        if (d.isKnowledgeIsland || d.verdict === 'KNOWLEDGE_ISLAND') {
+                            islandWarning = `
+                                <div style="background: #fff5f5; border-left: 4px solid #e74c3c; padding: 15px; border-radius: 4px; margin-bottom: 20px;">
+                                    <h3 style="margin: 0 0 10px 0; color: #e74c3c;">🚨 Knowledge Island</h3>
+                                    <p style="margin: 0; color: #34495e;"><strong>STOP:</strong> Do not refactor without knowledge transfer first.</p>
+                                    <p style="margin: 10px 0 0 0; font-size: 0.9rem; color: #7f8c8d; word-break: break-all;">This file is owned by a single expert (${d.primaryAuthor || 'unknown'}) who may no longer be actively contributing. Schedule a code walkthrough before making changes.</p>
+                                </div>
+                            `;
+                        }
+
+                        // Testability section
+                        let testabilitySection = '';
+                        if (d.hasTestFile !== undefined) {
+                            const hasTest = d.hasTestFile;
+                            const score = d.testabilityScore || 0;
+                            const isUntestedHotspot = d.isUntestedHotspot || d.verdict === 'UNTESTED_HOTSPOT';
+
+                            // Dynamic background based on health
+                            const bgGradient = (score >= 40 || hasTest)
+                                ? "linear-gradient(135deg, #11998e 0%, #38ef7d 100%)" // Green (Good)
+                                : "linear-gradient(135deg, #455a64 0%, #607d8b 100%)"; // Blue-Grey (Neutral/Needs Work)
+
+                            // Warning for untested hotspot (High contrast)
+                            let hotspotWarning = '';
+                            if (isUntestedHotspot) {
+                                hotspotWarning = `
+                                    <div style="margin-top: 12px; background: #ffebee; border-left: 4px solid #c62828; border-radius: 4px; padding: 10px; font-size: 0.85rem; color: #b71c1c; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                                        <div style="font-weight: bold; margin-bottom: 4px;">⚠️ Danger Zone</div>
+                                        <div>High risk + Frequent changes + No tests.</div>
+                                        <div style="margin-top: 4px; font-style: italic;">Safety net needed before refactoring.</div>
+                                    </div>
+                                `;
+                            }
+
+                            testabilitySection = `
+                                <div style="background: ${bgGradient}; padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 0.95rem; display: flex; align-items: center; gap: 8px; color: white;">
+                                        <span>🧪</span> Testability X-Ray
+                                    </h3>
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <div style="text-align: center; flex: 1;">
+                                            <div style="font-size: 1.5rem; font-weight: bold;">${hasTest ? '✅' : '❌'}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.9; text-transform: uppercase;">Has Test</div>
+                                        </div>
+                                        <div style="text-align: center; flex: 1;">
+                                            <div style="font-size: 1.5rem; font-weight: bold;">${score}</div>
+                                            <div style="font-size: 0.65rem; opacity: 0.9; text-transform: uppercase;">Score</div>
+                                        </div>
+                                    </div>
+                                    ${hotspotWarning}
+                                    ${d.testFilePath ? `<div style="font-size: 0.75rem; text-align: center; margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.2); word-break: break-all;"><code>${d.testFilePath}</code></div>` : ''}
+                                </div>
+                            `;
+                        }
+
+                        // Refactoring Workflow (Phase 3)
+                        let refactoringSection = '';
+                        if (d.lcom4Blocks && d.lcom4Blocks.length > 1) {
+                            // Sort blocks by size (smallest first)
+                            const clusters = [...d.lcom4Blocks].sort((a, b) => a.length - b.length);
+
+                            // Generate steps
+                            const steps = clusters.map((members, index) => {
+                                // If it's the last (largest) cluster, it's the survivor
+                                if (index === clusters.length - 1) {
+                                    return {
+                                        icon: '🏁',
+                                        action: 'Rename Source Class',
+                                        desc: `Remaining ${members.length} members form the core responsibility.`,
+                                        members: members
+                                    };
+                                }
+
+                                return {
+                                    icon: '✂️',
+                                    action: `Extract Class ${index + 1}`,
+                                    desc: `Move ${members.length} members to a new class.`,
+                                    members: members
+                                };
+                            });
+
+                            refactoringSection = `
+                                <div style="background: #fdf2e9; border: 1px solid #f6ddcc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 1rem; color: #d35400; display: flex; align-items: center; gap: 8px;">
+                                        <span>🏗️</span> Refactoring Recipe
+                                    </h3>
+                                    <p style="font-size: 0.85rem; color: #e67e22; margin-bottom: 15px; line-height: 1.4;">
+                                        This class has <strong>${clusters.length} independent clusters</strong>. Here is a plan to split it:
+                                    </p>
+                                    <div style="display: flex; flex-direction: column; gap: 10px;">
+                                        ${steps.map((step, i) => `
+                                            <div style="background: white; padding: 10px; border-radius: 6px; border-left: 3px solid ${i === steps.length - 1 ? '#27ae60' : '#e67e22'}; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                                                    <span style="font-size: 1.2rem;">${step.icon}</span>
+                                                    <strong style="font-size: 0.9rem; color: #34495e;">${step.action}</strong>
+                                                </div>
+                                                <div style="font-size: 0.8rem; color: #7f8c8d; margin-bottom: 6px;">${step.desc}</div>
+                                                <div class="break-all" style="font-size: 0.75rem; background: #f8f9fa; padding: 4px 8px; border-radius: 4px; border: 1px solid #eee; color: #555;">
+                                                    <code>${step.members.slice(0, 3).join(', ')}${step.members.length > 3 ? ', ...' : ''}</code>
+                                                </div>
+                                            </div>
+                                        `).join('')}
+                                    </div>
+                                </div>
+                            `;
+                        }
+
                         content.innerHTML = `
                             <div class="panel-header">
                                 <h2>${d.label}</h2>
                                 <span class="verdict-badge ${badgeClass}">${d.verdict}</span>
                             </div>
+
+                            ${socialSection}
+                            ${testabilitySection}
+                            ${islandWarning}
+                            ${refactoringSection}
 
                             <!-- Action Plan Section -->
                             <div class="action-plan" style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
@@ -1507,19 +1896,21 @@ public class HtmlReporter {
                                 <div class="tips"><h4>💡 Recommendation</h4>${diagnosis.fix}</div>
                             </div>
                             <div class="stat-grid">
-                                <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.maxCC}</span><span class="stat-label">Max CC</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
-                                <div class="stat-item"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                                <div class="stat-item" title="Risk Score = Complexity × Churn.&#010;High risk means high probability of defects."><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
+                                <div class="stat-item" title="Total number of commits modifying this file.&#010;High churn indicates frequent changes."><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                <div class="stat-item" title="Commits in the last 90 days.&#010;Active files require more attention."><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                <div class="stat-item" title="Number of other files that usually change when this file changes (Temporal Coupling)."><span class="stat-val">${d.coupled}</span><span class="stat-label">Coupled</span></div>
+                                <div class="stat-item" title="Cyclomatic Complexity of the most complex method.&#010;Max CC > 15 is hard to test."><span class="stat-val">${d.maxCC}</span><span class="stat-label">Max CC</span></div>
+                                <div class="stat-item" title="Lack of Cohesion of Methods (Type 4).&#010;LCOM4 > 1 suggests the class has multiple responsibilities."><span class="stat-val">${d.lcom4.toFixed(1)}</span><span class="stat-label">LCOM4</span></div>
+                                <div class="stat-item" title="Ratio of outgoing to total coupling (0=Stable Core, 1=Flexible Edge)."><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
+                                <div class="stat-item" title="Lines of Code."><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
                             </div>
+
                             <p style="font-size: 0.8rem; color: #999;">Full Path: ${d.label}</p>
                         `;
                         panel.classList.add('active');
                     }
+
 
                     function hideDetails() {
                         document.getElementById('detailsPanel').classList.remove('active');
@@ -1531,6 +1922,6 @@ public class HtmlReporter {
 
     private static final String TEMPLATE_BODY;
     static {
-        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
+        TEMPLATE_BODY = TEMPLATE_BODY_PART1 + TEMPLATE_BODY_PART1_B + TEMPLATE_BODY_PART2 + TEMPLATE_BODY_PART3;
     }
 }

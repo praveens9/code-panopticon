@@ -1,6 +1,5 @@
 package com.repo.analyzer.structural.metrics;
 
-import sootup.core.jimple.common.stmt.Stmt;
 import sootup.core.model.SootClass;
 import sootup.core.model.SootField;
 import sootup.core.model.SootMethod;
@@ -31,13 +30,13 @@ public class FanOutMetric implements MetricCalculator {
             for (Type paramType : method.getParameterTypes()) {
                 addType(dependencies, paramType);
             }
-            
+
             // 3. Local Variables (inside methods)
             if (method.isConcrete() && method.getBody() != null) {
                 method.getBody().getLocals().forEach(local -> addType(dependencies, local.getType()));
             }
         }
-        
+
         // Remove self-references and java.lang.* noise
         dependencies.remove(sootClass.getName());
         dependencies.remove("void");
@@ -45,7 +44,7 @@ public class FanOutMetric implements MetricCalculator {
         dependencies.remove("boolean");
         dependencies.remove("long");
         dependencies.remove("double");
-        
+
         return dependencies.size();
     }
 

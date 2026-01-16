@@ -145,9 +145,13 @@ public class GenericTextAnalyzer implements LanguageAnalyzer {
         return count;
     }
 
-    private double estimateMaxComplexity(List<String> lines) {
+    private record ComplexityResult(double score, int lineIndex) {
+    }
+
+    private ComplexityResult calculateMaxComplexity(List<String> lines) {
         // Simple heuristic: find the function with most branches
         double maxInWindow = 0;
+        int maxLineIndex = 0;
         double windowComplexity = 0;
         int windowSize = 50; // Look at 50-line windows
 
@@ -166,10 +170,17 @@ public class GenericTextAnalyzer implements LanguageAnalyzer {
                 }
             }
 
-            maxInWindow = Math.max(maxInWindow, windowComplexity);
+            if (windowComplexity > maxInWindow) {
+                maxInWindow = windowComplexity;
+                maxLineIndex = i;
+            }
         }
 
-        return maxInWindow;
+        return new ComplexityResult(maxInWindow, maxLineIndex);
+    }
+
+    private double estimateMaxComplexity(List<String> lines) {
+        return calculateMaxComplexity(lines).score();
     }
 
     private int countImports(List<String> lines) {
@@ -179,10 +190,35 @@ public class GenericTextAnalyzer implements LanguageAnalyzer {
     }
 
     private List<String> findComplexFunctions(List<String> lines, int threshold) {
-        // Simplified: just report if estimated max complexity exceeds threshold
-        if (estimateMaxComplexity(lines) > threshold) {
-            return List.of("[complex code detected]");
+        ComplexityResult result = calculateMaxComplexity(lines);
+
+        if (result.score() > threshold) {
+            // Found complex code, try to find the function name
+            String functionName = findFunctionNameBefore(lines, result.lineIndex());
+            return List.of(functionName);
         }
         return List.of();
+    }
+
+    private String findFunctionNameBefore(List<String> lines, int index) {
+        // Scan backwards for up to 100 lines to find a function declaration
+        for (int i = index; i >= Math.max(0, index - 100); i--) {
+            String line = lines.get(i);
+            for (Pattern pattern : FUNCTION_PATTERNS) {
+                Matcher matcher = pattern.matcher(line);
+                if (matcher.find()) {
+                    for (int g = matcher.groupCount(); g >= 1; g--) {
+                        String group = matcher.group(g);
+                        if (group != null && !group.trim().isEmpty()
+                                && !Set.of("async", "public", "private", "protected", "static", "final", "override",
+                                        "suspend", "pub", "const", "let", "var", "return", "switch", "if", "else",
+                                        "new", "throw", "case", "class", "record").contains(group)) {
+                            return group + " (approx)";
+                        }
+                    }
+                }
+            }
+        }
+        return "unknown_method_at_line_" + (index + 1);
     }
 }

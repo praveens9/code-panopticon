@@ -1,6 +1,8 @@
 # Code Panopticon
 
-A **polyglot code forensic tool** that identifies architectural decay by fusing **Evolutionary History (Git)** with **Structural Analysis**.
+> *"From Passive Visualizer to Active Architectural Advisor"*
+
+A **polyglot code forensic intelligence platform** that identifies architectural decay by fusing **Evolutionary History (Git)**, **Structural Analysis**, **Social Dynamics**, and **Testability Assessment**.
 
 Supports: **Java** (bytecode), **Python** (AST), **JavaScript/TypeScript** (regex), and any other language (generic fallback).
 
@@ -8,40 +10,109 @@ Supports: **Java** (bytecode), **Python** (AST), **JavaScript/TypeScript** (rege
 
 ## 🚀 Purpose
 
-In large-scale projects, standard linters often fail to capture the "Context of Risk." This tool categorizes code based on its **Volatility** (how often it changes) and its **Internal Complexity** (how hard it is to maintain).
+In large-scale projects, standard linters fail to capture the **Context of Risk**. Code Panopticon analyzes code through four integrated lenses:
 
-The goal is to identify **"Burning Platforms"**—highly active files that are structurally unsound—so teams can prioritize refactoring where it matters most.
+| Dimension | Question | Metrics |
+|-----------|----------|---------|
+| **📐 Structure** | How complex is this code? | Complexity, Cohesion, Coupling |
+| **⏱️ Evolution** | How often does it change? | Churn, Temporal Coupling |
+| **👥 Social** | Who knows this code? | Bus Factor, Knowledge Islands |
+| **🛡️ Safety** | Can I refactor confidently? | Testability Score, Seams |
+
+The goal: Identify **"Burning Platforms"**—highly active files that are structurally unsound, maintained by absent experts, with no safety net—so teams can prioritize refactoring where it matters most.
 
 ---
 
 ## 📊 The Metrics
 
-| Metric | Category | Description |
-| :--- | :--- | :--- |
-| **Churn** | Evolutionary | Number of Git commits touching the file. |
-| **Peers** | Evolutionary | Temporal coupling. Files that change together. |
-| **Complexity (CC)** | Structural | Cyclomatic complexity. Measures branching. |
-| **Max CC** | Structural | Complexity of the worst function. |
-| **Cohesion** | Structural | How related methods are to each other. |
-| **Fan-Out** | Structural | Number of dependencies (imports). |
-| **Risk Score** | Composite | `(Churn × CC × LCOM4) / 100` |
+### Evolutionary Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Churn** | Number of Git commits touching the file |
+| **Recent Churn** | Commits in the last 90 days |
+| **Temporal Coupling** | Files that change together (hidden dependencies) |
+| **Days Since Last Commit** | Code freshness/staleness indicator |
+
+### Structural Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Complexity (CC)** | Cyclomatic complexity—measures branching |
+| **Max CC** | Complexity of the worst function |
+| **Cohesion (LCOM4)** | How related methods are to each other |
+| **Fan-Out** | Number of dependencies (imports) |
+| **Instability** | Ratio of outbound to total coupling |
+
+### Social Metrics
+
+| Metric | Description |
+|--------|-------------|
+| **Author Count** | Number of distinct contributors |
+| **Primary Author %** | Knowledge concentration |
+| **Bus Factor** | Authors needed to cover 50% of code |
+
+### Composite Metrics
+
+| Metric | Formula |
+|--------|---------|
+| **Risk Score** | `Complexity × Churn × LCOM4` (amplified by social/safety factors) |
 
 ---
 
 ## 📋 Verdict Definitions
 
+### Structural Verdicts
+
 | Verdict | Meaning | Action |
-| :--- | :--- | :--- |
+|---------|---------|--------|
 | **OK** | Metrics within healthy thresholds | None |
+| **BLOATED** | Large file with many LOC | Consider splitting |
 | **BRAIN_METHOD** | Contains massive, complex methods | Extract Method |
-| **SHOTGUN_SURGERY** | Changes ripple to many files | Centralize logic |
 | **SPLIT_CANDIDATE** | Multiple unrelated clusters | Split the class |
-| **TOTAL_MESS** | Very low cohesion | High priority refactor |
+| **HIGH_COUPLING** | Too many dependencies | Dependency Inversion |
+
+### Behavioral Verdicts
+
+| Verdict | Meaning | Action |
+|---------|---------|--------|
+| **TOTAL_MESS** | High Complexity + High Churn | **Immediate refactor priority** |
 | **GOD_CLASS** | Too complex and too large | Full decomposition |
+| **SHOTGUN_SURGERY** | Changes ripple to many files | Centralize logic |
+| **HIDDEN_DEPENDENCY** | High temporal coupling, low imports | Make explicit |
+| **FRAGILE_HUB** | Central coordinator, frequent changes | Stabilize interface |
+
+### Social Verdicts
+
+| Verdict | Meaning | Action |
+|---------|---------|--------|
+| **KNOWLEDGE_ISLAND** | Single author + inactive expert | **Knowledge transfer first** |
+
+### Safety Verdicts
+
+| Verdict | Meaning | Action |
+|---------|---------|--------|
+| **UNTESTED_HOTSPOT** | High risk + No test coverage | **Write tests before refactoring** |
+
+
+### ⚠️ Verdict Priority (Masking Rules)
+The system uses a strict priority engine. Even if a file has multiple issues (e.g., it is both a `TOTAL_MESS` and has no tests), only the **highest priority verdict** is displayed to focus your attention on the most critical risk.
+
+| Priority | Verdict | Why? |
+|----------|---------|------|
+| **0 (Highest)** | **KNOWLEDGE_ISLAND** | 🚨 **Social Risk**: If the only expert leaves, the code becomes unmaintainable. |
+| **1** | **SHOTGUN_SURGERY** | 🌊 **Architecture Risk**: Changing this file breaks the system everywhere. |
+| **2** | **UNTESTED_HOTSPOT** | 🔥 **Safety Risk**: High complexity/churn with no safety net. |
+| **3** | **HIDDEN_DEPENDENCY** | 🕸️ **Hidden Risk**: Invisible coupling. |
+| **4** | **GOD_CLASS** / **TOTAL_MESS** | 🏗️ **Local Risk**: Bad design within the file. |
+| **5 (Lowest)** | **BLOATED** / **COMPLEX** | ⚠️ **Warning**: Code smell. |
+
+> *Example: A file that is a `TOTAL_MESS` and has no tests (`UNTESTED_HOTSPOT`) but is maintained by a single person will be labeled **KNOWLEDGE_ISLAND**. Fix the knowledge gap first (Code Walkthrough), then add tests, then refactor.*
 
 ---
 
 ## 🏃 How to Run
+
 
 ### Prerequisites
 - Java 17+
@@ -113,11 +184,9 @@ exclusions:
   - "**/test/**"
   - "**/node_modules/**"
 
-#- **System Map**: Interactive circle packing visualization of codebase structure and risk. Zoom in to exploring folders and files.played files
-
 # System Map visualization
 system_map:
-  max_files: 100  # Limit displayed files
+  max_files: 100
 ```
 
 See [`panopticon.yaml`](panopticon.yaml) for all available options.
@@ -126,7 +195,13 @@ See [`panopticon.yaml`](panopticon.yaml) for all available options.
 
 ## 📁 Output
 
-- **panopticon-report.html** - Interactive dashboard with quadrant view, treemap, and network graph
+- **panopticon-report.html** - Interactive dashboard with:
+  - **Bubble Chart**: Churn × Complexity visualization
+  - **System Map**: Circle-packing codebase explorer
+  - **Network Graph**: Temporal coupling visualization
+  - **Data Table**: Sortable, filterable file metrics
+  - **Side Panel**: Deep dive with forensics, testability, and action plans
+  
 - **panopticon-report.csv** - Spreadsheet-friendly data export
 
 ---
@@ -136,7 +211,10 @@ See [`panopticon.yaml`](panopticon.yaml) for all available options.
 ```
 PolyglotApp (CLI)
     │
-    ├── GitMiner (evolutionary metrics)
+    ├── GitMiner (evolutionary + social metrics)
+    │   ├── Churn Analysis
+    │   ├── Temporal Coupling
+    │   └── Social Forensics (Author Distribution, Bus Factor)
     │
     ├── AnalyzerRegistry (plugin system)
     │   ├── JavaBytecodeAnalyzer (SootUp)
@@ -145,25 +223,63 @@ PolyglotApp (CLI)
     │   └── GenericTextAnalyzer (fallback)
     │
     ├── ForensicRuleEngine (configurable verdicts)
+    │   ├── Structural Rules
+    │   ├── Behavioral Rules
+    │   ├── Social Rules
+    │   └── Safety Rules
     │
     └── Reporters (HTML, CSV)
 ```
 
 ---
 
-## 📚 Documentation
+## 🧠 Philosophy
 
-- [Architecture Plan](docs/plan.md) - Detailed design decisions
-- [Analyzer Reference](docs/analyzer-reference.md) - Technical implementation details
-- [Progress Tracker](docs/progress.md) - Implementation status
+Code Panopticon is built on four core beliefs:
+
+1. **Complexity is only a problem if we have to work with it** — A complex file untouched for years is stable; one changing weekly is a fire.
+
+2. **Code is written by teams, not individuals** — Knowledge islands and absent experts are organizational risks.
+
+3. **Fear without confidence is paralysis** — Show the safety net (tests, seams) before prescribing refactoring.
+
+4. **Diagnosis must lead to action** — Don't just say "God Class"; provide the refactoring pathway.
+
+Read the full [Philosophy Document](philosophy.md) for the complete design rationale.
 
 ---
 
-#static-analysis #code-quality #git-forensics #polyglot #architecture
+## 📚 Documentation
+
+- [Philosophy](philosophy.md) - Core beliefs and design rationale
+- [Architecture Plan](docs/plan.md) - Detailed design decisions
+- [Analyzer Reference](docs/analyzer-reference.md) - Technical implementation details
+- [Research](docs/research.md) - Product direction and paradigm extensions
+
+---
+
+## 🎯 Roadmap
+
+### Current (v2.x)
+- ✅ Bubble Chart visualization
+- ✅ System Map (circle-packing)
+- ✅ Network Graph (temporal coupling)
+- ✅ Configurable verdicts via YAML
+- ✅ Polyglot analysis (Java, Python, JS)
+
+### Next (v3.0 — "Active Advisor")
+- 🔲 **Social Forensics Panel** — Author distribution, bus factor, knowledge islands
+- 🔲 **Testability X-Ray** — Test coverage correlation, seam identification
+- 🔲 **Refactoring Workflows** — LCOM4 clusters as named responsibilities
+
+---
+
+## 🏷️ Tags
+
+#static-analysis #code-quality #git-forensics #polyglot #architecture #technical-debt
 
 ---
 
 ## 📄 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-

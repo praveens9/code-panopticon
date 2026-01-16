@@ -4,13 +4,14 @@ import com.repo.analyzer.analyzers.*;
 import com.repo.analyzer.core.*;
 import com.repo.analyzer.git.GitAnalysisResult;
 import com.repo.analyzer.git.GitMiner;
+import com.repo.analyzer.git.SocialForensics;
 import com.repo.analyzer.report.AnalysisData;
 import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
+import com.repo.analyzer.report.JsonDataConverter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
+import com.repo.analyzer.testability.TestabilityAnalyzer;
 
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.*;
@@ -121,16 +122,8 @@ public class PolyglotApp {
         System.out.println("Cloning to: " + tempDir);
 
         ProcessBuilder pb = new ProcessBuilder("git", "clone", "--depth", "100", url, tempDir.toString());
-        pb.redirectErrorStream(true);
+        pb.inheritIO(); // Show git progress directly in console
         Process process = pb.start();
-
-        // Print clone progress
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println("  " + line);
-            }
-        }
 
         boolean finished = process.waitFor(300, TimeUnit.SECONDS); // 5 min timeout
         if (!finished || process.exitValue() != 0) {
@@ -215,6 +208,7 @@ public class PolyglotApp {
         // Phase 2: Structural Analysis
         System.out.println("\n>>> PHASE 2: ANALYZING STRUCTURE <<<");
         ForensicRuleEngine ruleEngine = new ForensicRuleEngine();
+        TestabilityAnalyzer testabilityAnalyzer = new TestabilityAnalyzer(repoPath);
         List<AnalysisData> reportData = new ArrayList<>();
 
         // Print header
@@ -225,8 +219,11 @@ public class PolyglotApp {
 
         int analyzed = 0;
         int skipped = 0;
+        int processed = 0;
+        int totalFiles = filesToAnalyze.size();
 
         for (String relativePath : filesToAnalyze) {
+            processed++;
             // Skip test files
             if (relativePath.contains("/test/") || relativePath.contains("Test.")) {
                 skipped++;
@@ -248,23 +245,41 @@ public class PolyglotApp {
             int churn = churnData.getOrDefault(relativePath, 0);
             int recentChurn = recentChurnData.getOrDefault(relativePath, 0);
             int coupledPeers = couplingData.getOrDefault(relativePath, Collections.emptySet()).size();
+            int daysSinceLastCommit = gitResult.daysSinceLastCommit(relativePath);
 
-            // Calculate risk score
+            // Mine social forensics for files with significant churn
+            SocialForensics social = SocialForensics.empty();
+            if (churn >= 3) { // Only mine blame for active files (performance optimization)
+                social = miner.mineSocialForensics(repoPath, relativePath, recentChurn, churn);
+            }
+
+            // Calculate risk score with social amplifier
             double lcom4 = metrics.cohesion() > 0 ? 1.0 / metrics.cohesion() : 1.0;
-            double riskScore = (churn * metrics.totalComplexity() * lcom4) / 100.0;
+            double baseRisk = (churn * metrics.totalComplexity() * lcom4) / 100.0;
+            double riskScore = baseRisk * social.calculateRiskMultiplier();
 
-            // Determine verdict
+            // Determine verdict with social context
             ForensicRuleEngine.EvaluationContext ctx = new ForensicRuleEngine.EvaluationContext(
-                    metrics, churn, recentChurn, coupledPeers, config);
+                    metrics, churn, recentChurn, coupledPeers, config, social);
             String verdict = ruleEngine.evaluate(ctx);
 
             // Convert to AnalysisData for reporting
             String className = extractClassName(relativePath);
+            // Testability analysis
+            boolean hasTestFile = testabilityAnalyzer.hasTest(relativePath);
+            String testFilePath = testabilityAnalyzer.findTestFile(relativePath)
+                    .map(Path::toString).orElse("");
+            int testabilityScore = testabilityAnalyzer.calculateTestabilityScore(
+                    relativePath, metrics.fanOut(), lcom4, metrics.totalComplexity(), hasTestFile);
+            boolean isUntestedHotspot = testabilityAnalyzer.isUntestedHotspot(
+                    hasTestFile, riskScore, churn);
+
             reportData.add(new AnalysisData(
                     className,
                     churn,
                     recentChurn,
                     coupledPeers,
+                    daysSinceLastCommit,
                     metrics.functionCount(),
                     metrics.cohesion(),
                     lcom4,
@@ -281,7 +296,17 @@ public class PolyglotApp {
                     List.of(), // lcom4Blocks
                     couplingData.getOrDefault(relativePath, Collections.emptySet()).stream()
                             .map(this::extractClassName)
-                            .collect(Collectors.toSet())));
+                            .collect(Collectors.toSet()),
+                    social.authorCount(),
+                    social.primaryAuthor(),
+                    social.primaryAuthorPercentage(),
+                    social.busFactor(),
+                    social.isKnowledgeIsland(),
+                    social.topContributors(),
+                    hasTestFile,
+                    testFilePath,
+                    testabilityScore,
+                    isUntestedHotspot));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(
@@ -294,7 +319,14 @@ public class PolyglotApp {
                     verdict));
 
             analyzed++;
+
+            // Progress update
+            if (processed % 50 == 0 || processed == totalFiles) {
+                System.out.print("\r> analyzing structure... " + processed + "/" + totalFiles + " files processed");
+                System.out.flush();
+            }
         }
+        System.out.println(); // Newline after progress
 
         System.out.printf("%nAnalyzed: %d files | Skipped: %d test files%n", analyzed, skipped);
 
@@ -307,8 +339,15 @@ public class PolyglotApp {
         Path htmlPath = args.outputDir().resolve("panopticon-report.html");
         Path csvPath = args.outputDir().resolve("panopticon-report.csv");
 
-        new HtmlReporter().generate(reportData, htmlPath);
+        HtmlReporter.AnalysisStats stats = new HtmlReporter.AnalysisStats(analyzed, skipped, totalFiles);
+        new HtmlReporter().generate(reportData, stats, htmlPath);
         new CsvReporter().generate(reportData, csvPath);
+
+        // Generate JSON for AI/Tools
+        Path jsonPath = args.outputDir().resolve("panopticon-data.json");
+        String jsonOutput = new JsonDataConverter().convertToSelfDescribingJson(reportData);
+        Files.writeString(jsonPath, jsonOutput);
+        System.out.println("JSON Report generated at: " + jsonPath);
 
         // Summary
         printSummary(reportData);

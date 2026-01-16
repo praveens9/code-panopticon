@@ -2,6 +2,7 @@ package com.repo.analyzer.rules;
 
 import com.repo.analyzer.core.AnalyzerConfig;
 import com.repo.analyzer.core.FileMetrics;
+import com.repo.analyzer.git.SocialForensics;
 
 import java.util.*;
 
@@ -33,13 +34,31 @@ public class ForensicRuleEngine {
 
     /**
      * Context for rule evaluation.
+     * Includes structural metrics, evolutionary data, and social forensics.
      */
     public record EvaluationContext(
             FileMetrics metrics,
             int churn,
             int recentChurn,
             int coupledPeers,
-            AnalyzerConfig config) {
+            AnalyzerConfig config,
+            SocialForensics social,
+            boolean isUntestedHotspot) {
+
+        // Convenience constructor without social/testability (backward compatibility)
+        public EvaluationContext(
+                FileMetrics metrics, int churn, int recentChurn,
+                int coupledPeers, AnalyzerConfig config) {
+            this(metrics, churn, recentChurn, coupledPeers, config, SocialForensics.empty(), false);
+        }
+
+        // Constructor for compatibility with old tests causing lint errors
+        public EvaluationContext(
+                FileMetrics metrics, int churn, int recentChurn,
+                int coupledPeers, AnalyzerConfig config, SocialForensics social) {
+            this(metrics, churn, recentChurn, coupledPeers, config, social, false);
+        }
+
         public double totalCC() {
             return metrics.totalComplexity();
         }
@@ -69,7 +88,23 @@ public class ForensicRuleEngine {
             return metrics.cohesion() > 0 ? 1.0 / metrics.cohesion() : 1.0;
         }
 
-        // Unnecessary suppression removed - this is actually safe as-is
+        // Social forensics accessors
+        public int busFactor() {
+            return social.busFactor();
+        }
+
+        public boolean isKnowledgeIsland() {
+            return social.isKnowledgeIsland();
+        }
+
+        public boolean isCoordinationBottleneck() {
+            return social.isCoordinationBottleneck();
+        }
+
+        public int authorCount() {
+            return social.authorCount();
+        }
+
         public <T> T getExtra(String key, T defaultValue) {
             return metrics.getExtra(key, defaultValue);
         }
@@ -128,6 +163,13 @@ public class ForensicRuleEngine {
     private List<VerdictRule> buildDefaultRules() {
         List<VerdictRule> defaultRules = new ArrayList<>();
 
+        // Priority 0: Knowledge Island (social risk - highest priority)
+        defaultRules.add(new VerdictRule(
+                "KNOWLEDGE_ISLAND",
+                0,
+                ctx -> ctx.isKnowledgeIsland(),
+                "Single developer dependency with inactive expert"));
+
         // Priority 1: Shotgun Surgery (changes ripple everywhere)
         defaultRules.add(new VerdictRule(
                 "SHOTGUN_SURGERY",
@@ -135,10 +177,17 @@ public class ForensicRuleEngine {
                 ctx -> ctx.coupledPeers() > 10,
                 "Changes to this file require editing >10 other files"));
 
-        // Priority 2: Hidden Dependency
+        // Priority 2: Untested Hotspot (Testability risk)
+        defaultRules.add(new VerdictRule(
+                "UNTESTED_HOTSPOT",
+                2,
+                ctx -> ctx.isUntestedHotspot,
+                "High risk, high churn, and NO tests"));
+
+        // Priority 3: Hidden Dependency
         defaultRules.add(new VerdictRule(
                 "HIDDEN_DEPENDENCY",
-                2,
+                3,
                 ctx -> ctx.coupledPeers() > 3 && ctx.fanOut() < 5,
                 "High temporal coupling but low static imports"));
 
