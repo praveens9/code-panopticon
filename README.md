@@ -260,17 +260,20 @@ Read the full [Philosophy Document](philosophy.md) for the complete design ratio
 
 ## 🎯 Roadmap
 
-### Current (v2.x)
+### Current (v3.0 — "Active Advisor") ✅
 - ✅ Bubble Chart visualization
 - ✅ System Map (circle-packing)
 - ✅ Network Graph (temporal coupling)
 - ✅ Configurable verdicts via YAML
 - ✅ Polyglot analysis (Java, Python, JS)
+- ✅ **Social Forensics Panel** — Author distribution, bus factor, knowledge islands
+- ✅ **Testability X-Ray** — Test coverage correlation, seam identification
+- ✅ **Refactoring Workflows** — LCOM4 clusters as named responsibilities
 
-### Next (v3.0 — "Active Advisor")
-- 🔲 **Social Forensics Panel** — Author distribution, bus factor, knowledge islands
-- 🔲 **Testability X-Ray** — Test coverage correlation, seam identification
-- 🔲 **Refactoring Workflows** — LCOM4 clusters as named responsibilities
+### Future Enhancements
+- 🔮 Multi-language IDE plugin support
+- 🔮 Real-time analysis during development
+- 🔮 AI-powered refactoring suggestions
 
 ---
 
