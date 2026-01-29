@@ -63,3 +63,7 @@ app/graphs/
 # Generated reports
 reports/
 app/bin/
+
+# MCP Wrapper
+mcp-wrapper/node_modules/
+mcp-wrapper/dist/

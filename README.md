@@ -153,6 +153,25 @@ cd code-panopticon
 | `--hotspots-only` | Only analyze files with Git activity |
 | `--min-churn <n>` | Minimum churn to include a file |
 | `--keep-clone` | Keep cloned repo (for remote URLs) |
+---
+
+## 🤖 AI Agent Integration (MCP)
+
+Code Panopticon includes a **Model Context Protocol (MCP)** server, identifying it as a "Smart Tool" for AI agents (like Claude Desktop).
+
+### Capabilities
+- **`analyze_codebase`**: AI triggers the scan, getting immediate access to the full forensic report (JSON) and providing you the HTML link.
+- **`get_risk_summary`**: AI identifies "Burning Platforms" and architectural decay instantly.
+- **`get_file_insights`**: AI retrieves deep metrics for specific files on demand.
+
+### Quick Setup
+
+1. Run the setup script:
+   ```bash
+   ./setup-mcp.sh
+   ```
+2. Copy the generated config into your `claude_desktop_config.json`.
+3. Restart Claude Desktop.
 
 ---
 

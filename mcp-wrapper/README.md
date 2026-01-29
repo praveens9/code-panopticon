@@ -1,0 +1,37 @@
+# Code Panopticon MCP Server
+
+This is a Model Context Protocol (MCP) server for Code Panopticon, allowing AI agents to analyze this repository and understand its architectural risks.
+
+## Prerequisites
+
+- Node.js 18+
+- Java 17+ (for running the underlying Code Panopticon CLI)
+
+## Configuration
+
+Add this to your `claude_desktop_config.json` (usually in `~/Library/Application Support/Claude/` on macOS):
+
+```json
+{
+  "mcpServers": {
+    "code-panopticon": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/code-panopticon/mcp-wrapper/dist/index.js"
+      ]
+    }
+  }
+}
+```
+
+## Tools
+
+- `analyze_codebase`: Runs analysis and returns top risks + path to HTML report.
+- `get_file_insights`: Get detailed metrics for a specific file.
+- `get_risk_summary`: Get a quick summary of the "Burning Platforms".
+
+## Development
+
+1. `npm install`
+2. `npm run build`
+3. `npm start` (Runs via stdio)
