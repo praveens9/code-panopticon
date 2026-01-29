@@ -63,6 +63,7 @@ app/graphs/
 # Generated reports
 reports/
 app/bin/
+panopticon-reports/
 
 # MCP Wrapper
 mcp-wrapper/node_modules/
