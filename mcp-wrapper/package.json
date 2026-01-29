@@ -2,6 +2,7 @@
   "name": "code-panopticon-mcp",
   "version": "1.0.0",
   "description": "MCP server for Code Panopticon Analysis",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
