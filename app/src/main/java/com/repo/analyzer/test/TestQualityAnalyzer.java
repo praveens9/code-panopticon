@@ -14,16 +14,15 @@ public class TestQualityAnalyzer {
     private static final Pattern THREAD_SLEEP = Pattern.compile("Thread\\.sleep\\s*\\(");
     private static final Pattern AWAIT_DELAY = Pattern.compile("await\\s+delay\\s*\\("); // Kotlin/JS
     private static final Pattern PY_TIME_SLEEP = Pattern.compile("time\\.sleep\\s*\\(");
-    private static final Pattern JS_SET_TIMEOUT = Pattern.compile("setTimeout\\s*\\(");
+
     private static final Pattern CYPRESS_WAIT = Pattern.compile("cy\\.wait\\s*\\(\\s*\\d+\\s*\\)"); // cy.wait(1000)
 
     // Patterns for Assertion Logic
-    private static final Pattern ASSERT_PATTERN = Pattern.compile("assert|expect\\(|verify\\(",
+    private static final Pattern ASSERT_PATTERN = Pattern.compile("assert|expect\\s*\\(|verify\\s*\\(",
             Pattern.CASE_INSENSITIVE);
 
     // Patterns for Manual Selectors (simplified)
     private static final Pattern XPATH_USAGE = Pattern.compile("By\\.xpath|xpath\\s*\\(");
-    private static final Pattern CSS_USAGE = Pattern.compile("By\\.cssSelector|css\\s*\\(");
 
     public record Result(List<String> issues, java.util.Map<String, String> stats) {
     }
@@ -41,10 +40,13 @@ public class TestQualityAnalyzer {
                 framework = "JUnit";
             else if (content.contains("org.testng"))
                 framework = "TestNG";
-            else if (content.contains("cypress"))
+            else if (content.contains("cypress") || content.contains("cy.visit"))
                 framework = "Cypress";
-            else if (content.contains("playwright"))
+            else if (content.contains("playwright") || content.contains("@playwright/test"))
                 framework = "Playwright";
+            else if (content.contains("jest") || content.contains("describe(") || content.contains("test("))
+                // Simple Jest/Mocha heuristic if no explicit import found
+                framework = "Jest/Mocha";
             else if (content.contains("from unittest"))
                 framework = "unittest (Python)";
             else if (content.contains("import pytest"))
@@ -54,7 +56,7 @@ public class TestQualityAnalyzer {
             // Detect Mocking
             if (content.contains("Mockito") || content.contains("mock("))
                 stats.put("Mocking", "Mockito/Mock");
-            if (content.contains("jest.fn()"))
+            if (content.contains("jest.fn()") || content.contains("spyOn"))
                 stats.put("Mocking", "Jest");
 
             // Count Assertions

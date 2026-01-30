@@ -37,7 +37,8 @@ public class AnalyzerConfig {
     private Set<String> testPatterns = Set.of(
             "**/test/**", "**/tests/**", "**/*Test.java", "**/*Tests.java",
             "**/*_test.py", "**/*.test.ts", "**/*.spec.ts",
-            "**/*.test.js", "**/*.spec.js");
+            "**/*.test.js", "**/*.spec.js", "**/*.e2e.ts", "**/*.e2e.js",
+            "**/specs/**", "**/__tests__/**", "playwright.config.ts");
 
     // Treemap settings
     private int treemapMaxFiles = 100;

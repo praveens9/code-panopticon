@@ -1050,7 +1050,7 @@ public class HtmlReporter {
                                                     <td>${d.y.toFixed(0)}</td>
                                                     <td>${d.lcom4.toFixed(1)}</td>
                                                     <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
-                                                    ${currentScope === 'test' ? `<td>${(d.testIssues || []).map(i => `<span style="font-size:0.8rem; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; margin-right:4px;">${i}</span>`).join('')}</td>` : ''}
+                                                    ${(currentScope === 'test' || currentScope === 'all') ? `<td>${(d.testIssues || []).map(i => `<span style="font-size:0.8rem; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; margin-right:4px;">${i}</span>`).join('')}</td>` : ''}
                                                 </tr>
                                             `;}).join('');
                                         }
