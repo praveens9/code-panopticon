@@ -287,7 +287,8 @@ public class HtmlReporter {
                                                         </div>
 
                                                         <!-- Scope Filter -->
-                                                        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: #fff; padding: 10px 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                        <!-- Scope Filter -->
+                                                        <div id="scope-control-panel" style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: #fff; padding: 10px 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
                                                             <span style="font-weight: bold; color: #2c3e50; font-size: 0.9rem;">Analysis Scope:</span>
                                                             <div class="scope-toggle" style="display: flex; background: #eef2f7; border-radius: 4px; padding: 2px;">
                                                                 <button id="scope-prod" class="scope-btn active" onclick="setScope('prod')" style="border:none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #7f8c8d; background: transparent; transition: all 0.2s;">Production</button>
@@ -534,7 +535,8 @@ public class HtmlReporter {
                                                         if(testHealthHeader) testHealthHeader.style.display = 'table-cell';
                                                     } else {
                                                         rawData = allData;
-                                                        if(testHealthHeader) testHealthHeader.style.display = 'none';
+                                                        // Show Test Health in 'All' view too, as it's useful context
+                                                        if(testHealthHeader) testHealthHeader.style.display = 'table-cell';
                                                     }
 
                                                     // Rebuild filtered filtered datasets
@@ -658,6 +660,11 @@ public class HtmlReporter {
 
                                                     const content = document.getElementById(tabName + '-tab');
                                                     if (content) content.classList.add('active');
+
+                                                    const scopePanel = document.getElementById('scope-control-panel');
+                                                    if (scopePanel) {
+                                                        scopePanel.style.display = (tabName === 'philosophy') ? 'none' : 'flex';
+                                                    }
 
                                                     if (tabName === 'table') renderTable();
                                                     if (tabName === 'treemap') renderTreemap();
@@ -2026,12 +2033,56 @@ public class HtmlReporter {
                             `;
                         }
 
+                        // Test Profile Section
+                        let testProfileSection = '';
+                        if (d.isTest || (d.testProfile && Object.keys(d.testProfile).length > 0)) {
+                             const profile = d.testProfile || {};
+                             const framework = profile['Framework'] || 'Unknown';
+                             const assertions = profile['Assertions'] || 'N/A';
+                             // Only show assertions if it's a number or non-empty
+
+                             testProfileSection = `
+                                <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                                    <h3 style="margin: 0 0 12px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px; color: white;">
+                                        <span>🧪</span> Test Profile
+                                    </h3>
+                                    <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                        <div style="background: rgba(255,255,255,0.15); padding: 8px; border-radius: 6px;">
+                                            <div style="font-size: 0.7rem; opacity: 0.8; text-transform: uppercase;">Framework</div>
+                                            <div style="font-weight: bold; font-size: 0.9rem;">${framework}</div>
+                                        </div>
+                                        <div style="background: rgba(255,255,255,0.15); padding: 8px; border-radius: 6px;">
+                                            <div style="font-size: 0.7rem; opacity: 0.8; text-transform: uppercase;">Assertions</div>
+                                            <div style="font-weight: bold; font-size: 0.9rem;">${assertions}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                             `;
+                        }
+
+                        // Test Issues Section
+                        let testIssuesSection = '';
+                        if (d.testIssues && d.testIssues.length > 0) {
+                            testIssuesSection = `
+                                <div style="background: #fff1f2; border: 1px solid #fda4af; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                    <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: #be123c; display: flex; align-items: center; gap: 8px;">
+                                        <span>⚠️</span> Test Health Issues
+                                    </h3>
+                                    <ul style="margin:0; padding-left:20px; color: #881337;">
+                                        ${d.testIssues.map(issue => `<li>${issue}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            `;
+                        }
+
                         content.innerHTML = `
                             <div class="panel-header">
                                 <h2>${d.label}</h2>
                                 <span class="verdict-badge ${badgeClass}">${d.verdict}</span>
                             </div>
 
+                            ${testIssuesSection}
+                            ${testProfileSection}
                             ${socialSection}
                             ${testabilitySection}
                             ${islandWarning}
