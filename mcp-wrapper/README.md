@@ -27,8 +27,11 @@ Add this to your `claude_desktop_config.json` (usually in `~/Library/Application
 ## Tools
 
 - `analyze_codebase`: Runs analysis and returns top risks + path to HTML report.
-- `get_file_insights`: Get detailed metrics for a specific file.
 - `get_risk_summary`: Get a quick summary of the "Burning Platforms".
+- `get_file_insights`: Get detailed metrics for a specific file.
+- `get_test_health_summary`: Get overall testing stats (asserts, frameworks, hotspots).
+- `find_untested_hotspots`: List critical files needing tests.
+- `get_file_test_profile`: Get test-specific details for a file.
 
 ## Development
 

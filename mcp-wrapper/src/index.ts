@@ -44,7 +44,7 @@ class PanopticonServer {
 
     this.setupResourceHandlers();
     this.setupToolHandlers();
-    
+
     // Error handling
     this.server.onerror = (error) => console.error("[MCP Error]", error);
     process.on("SIGINT", async () => {
@@ -69,18 +69,18 @@ class PanopticonServer {
       const uri = request.params.uri;
       if (uri === "panopticon://latest-report") {
         if (this.currentReportPath && await fs.pathExists(this.currentReportPath)) {
-            const content = await fs.readFile(this.currentReportPath, "utf-8");
-            return {
-                contents: [
-                {
-                    uri: "panopticon://latest-report",
-                    mimeType: "application/json",
-                    text: content,
-                },
-                ],
-            };
+          const content = await fs.readFile(this.currentReportPath, "utf-8");
+          return {
+            contents: [
+              {
+                uri: "panopticon://latest-report",
+                mimeType: "application/json",
+                text: content,
+              },
+            ],
+          };
         } else {
-             throw new McpError(ErrorCode.InvalidRequest, "No report found. Run analyze_codebase first.");
+          throw new McpError(ErrorCode.InvalidRequest, "No report found. Run analyze_codebase first.");
         }
       }
       throw new McpError(ErrorCode.InvalidRequest, `Unknown resource: ${uri}`);
@@ -123,17 +123,52 @@ class PanopticonServer {
           },
         },
         {
-            name: "get_risk_summary",
-            description: "Get the top risky files and overall verdict distribution.",
-            inputSchema: {
-                type: "object",
-                properties: {
-                    limit: {
-                        type: "number",
-                        description: "Number of top risky files to return (default 10)",
-                    }
-                }
+          name: "get_risk_summary",
+          description: "Get the top risky files and overall verdict distribution.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              limit: {
+                type: "number",
+                description: "Number of top risky files to return (default 10)",
+              }
             }
+          }
+        },
+        {
+          name: "get_test_health_summary",
+          description: "Get a high-level overview of the project's testing state (frameworks, assertions, untested hotspots).",
+          inputSchema: {
+            type: "object",
+            properties: {}
+          }
+        },
+        {
+          name: "find_untested_hotspots",
+          description: "List highly complex/active files that have NO associated test file. Prioritizes where to add tests first.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              limit: {
+                type: "number",
+                description: "Number of files to return (default 10)"
+              }
+            }
+          }
+        },
+        {
+          name: "get_file_test_profile",
+          description: "Get detailed testing insights for a file: associated test path, framework used, assertion count, and test issues.",
+          inputSchema: {
+            type: "object",
+            properties: {
+              filePath: {
+                type: "string",
+                description: "Path of the file to inspect"
+              }
+            },
+            required: ["filePath"]
+          }
         }
       ],
     }));
@@ -145,7 +180,13 @@ class PanopticonServer {
         case "get_file_insights":
           return this.handleGetFileInsights(request.params.arguments);
         case "get_risk_summary":
-            return this.handleGetRiskSummary(request.params.arguments);
+          return this.handleGetRiskSummary(request.params.arguments);
+        case "get_test_health_summary":
+          return this.handleGetTestHealth();
+        case "find_untested_hotspots":
+          return this.handleFindUntestedHotspots(request.params.arguments);
+        case "get_file_test_profile":
+          return this.handleGetFileTestProfile(request.params.arguments);
         default:
           throw new McpError(ErrorCode.MethodNotFound, "Unknown tool");
       }
@@ -159,7 +200,7 @@ class PanopticonServer {
 
     const repoPath = args.path;
     const hotspotsOnly = args.hotspotsOnly ? "--hotspots-only" : "";
-    
+
     // Determine output directory relative to the analyzed repo
     // We assume repoPath is the root of the repo
     const outputDir = path.join(repoPath, "panopticon-reports");
@@ -175,11 +216,11 @@ class PanopticonServer {
       // Check if report exists
       if (!(await fs.pathExists(jsonReportPath))) {
         return {
-            content: [{
-                type:"text",
-                text: `Analysis failed or produced no output at ${outputDir}.\nStderr: ${stderr}\nStdout: ${stdout}`
-            }],
-            isError: true
+          content: [{
+            type: "text",
+            text: `Analysis failed or produced no output at ${outputDir}.\nStderr: ${stderr}\nStdout: ${stdout}`
+          }],
+          isError: true
         }
       }
 
@@ -188,18 +229,18 @@ class PanopticonServer {
 
       // Read JSON content
       const jsonContent = await fs.readFile(jsonReportPath, "utf-8");
-      
+
       const dataSize = jsonContent.length;
       let returnContent = jsonContent;
       let note = "";
 
       if (dataSize > 50 * 1024 * 1024) { // 50MB limit
-           note = "NOTE: Full JSON report is too large (>50MB). Returning summary only. Use get_file_insights for details.";
-           const data = JSON.parse(jsonContent);
-           if(data.files && data.files.length > 100) {
-               data.files = data.files.sort((a:any, b:any) => b.riskScore - a.riskScore).slice(0, 100);
-               returnContent = JSON.stringify(data);
-           }
+        note = "NOTE: Full JSON report is too large (>50MB). Returning summary only. Use get_file_insights for details.";
+        const data = JSON.parse(jsonContent);
+        if (data.files && data.files.length > 100) {
+          data.files = data.files.sort((a: any, b: any) => b.riskScore - a.riskScore).slice(0, 100);
+          returnContent = JSON.stringify(data);
+        }
       }
 
       return {
@@ -209,7 +250,7 @@ class PanopticonServer {
             text: `Analysis Complete.\n\nHTML Report: ${htmlReportPath}\n\n${note}`,
           },
           {
-            type: "text", 
+            type: "text",
             text: returnContent
           }
         ],
@@ -230,67 +271,191 @@ class PanopticonServer {
 
   private async handleGetFileInsights(args: any) {
     if (!args.filePath) {
-        throw new McpError(ErrorCode.InvalidParams, "filePath is required");
+      throw new McpError(ErrorCode.InvalidParams, "filePath is required");
     }
 
     try {
-        const data = await this.loadReport();
-        // Normalize slashes for comparison
-        const normalizedSearchPath = args.filePath.replace(/\\/g, '/');
-        
-        const fileData = data.files.find((f: any) => {
-             // Try strict match or suffix match
-             return f.label === normalizedSearchPath || f.label.endsWith('/' + normalizedSearchPath);
-        });
+      const data = await this.loadReport();
+      // Normalize slashes for comparison
+      const normalizedSearchPath = args.filePath.replace(/\\/g, '/');
 
-        if (!fileData) {
-            return {
-                content: [{ type: "text", text: `File not found in report: ${args.filePath}` }],
-                isError: true
-            };
-        }
+      const fileData = data.files.find((f: any) => {
+        // Try strict match or suffix match
+        return f.label === normalizedSearchPath || f.label.endsWith('/' + normalizedSearchPath);
+      });
 
+      if (!fileData) {
         return {
-            content: [{ type: "text", text: JSON.stringify(fileData, null, 2) }]
+          content: [{ type: "text", text: `File not found in report: ${args.filePath}` }],
+          isError: true
         };
+      }
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(fileData, null, 2) }]
+      };
     } catch (e: any) {
-        return {
-            content: [{ type: "text", text: e.message }],
-            isError: true
-        };
+      return {
+        content: [{ type: "text", text: e.message }],
+        isError: true
+      };
     }
   }
 
   private async handleGetRiskSummary(args: any) {
-      try {
-        const limit = args.limit || 10;
-        const data = await this.loadReport();
-        
-        const topRisks = data.files
-            .sort((a: any, b: any) => b.riskScore - a.riskScore)
-            .slice(0, limit)
-            .map((f: any) => `${f.label} (Risk: ${f.riskScore.toFixed(1)}, Verdict: ${f.verdict})`)
-            .join("\n");
+    try {
+      const limit = args.limit || 10;
+      const data = await this.loadReport();
 
-        return {
-            content: [{ type: "text", text: `Top ${limit} Risky Files:\n${topRisks}` }]
-        };
-      } catch (e: any) {
-          return {
-              content: [{ type: "text", text: e.message }],
-              isError: true
-          };
+      const topRisks = data.files
+        .sort((a: any, b: any) => b.riskScore - a.riskScore)
+        .slice(0, limit)
+        .map((f: any) => `${f.label} (Risk: ${f.riskScore.toFixed(1)}, Verdict: ${f.verdict})`)
+        .join("\n");
+
+      return {
+        content: [{ type: "text", text: `Top ${limit} Risky Files:\n${topRisks}` }]
+      };
+    } catch (e: any) {
+      return {
+        content: [{ type: "text", text: e.message }],
+        isError: true
+      };
+    }
+  }
+
+  private async handleGetTestHealth() {
+    try {
+      const data = await this.loadReport();
+      const files = data.files || [];
+
+      const testFiles = files.filter((f: any) => f.isTest);
+      const totalFiles = files.length;
+      const totalTestFiles = testFiles.length;
+
+      let totalAssertions = 0;
+      const frameworks: Record<string, number> = {};
+      let untestedHotspotsCount = 0;
+
+      files.forEach((f: any) => {
+        if (f.isTest) {
+          const profile = f.testProfile || {};
+          if (profile.Assertions) totalAssertions += parseInt(profile.Assertions) || 0;
+          if (profile.Framework) {
+            const fw = profile.Framework;
+            frameworks[fw] = (frameworks[fw] || 0) + 1;
+          }
+        } else {
+          // Check if untested hotspot
+          if (f.verdict === 'UNTESTED_HOTSPOT' || f.isUntestedHotspot) {
+            untestedHotspotsCount++;
+          }
+        }
+      });
+
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({
+            totalFiles,
+            totalTestFiles,
+            testRatio: totalFiles > 0 ? (totalTestFiles / totalFiles).toFixed(2) : 0,
+            totalAssertions,
+            frameworks,
+            criticalUntestedHotspots: untestedHotspotsCount
+          }, null, 2)
+        }]
+      };
+    } catch (e: any) {
+      return {
+        content: [{ type: "text", text: e.message }],
+        isError: true
+      };
+    }
+  }
+
+  private async handleFindUntestedHotspots(args: any) {
+    try {
+      const limit = args.limit || 10;
+      const data = await this.loadReport();
+
+      const hotspots = (data.files || [])
+        .filter((f: any) => !f.isTest && (f.verdict === 'UNTESTED_HOTSPOT' || f.isUntestedHotspot))
+        .sort((a: any, b: any) => b.riskScore - a.riskScore)
+        .slice(0, limit);
+
+      if (hotspots.length === 0) {
+        return { content: [{ type: "text", text: "No critical untested hotspots found. Great job!" }] };
       }
+
+      const result = hotspots.map((f: any) => ({
+        file: f.label,
+        riskScore: f.riskScore,
+        complexity: f.y,
+        churn: f.x,
+        verdict: f.verdict
+      }));
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(result, null, 2) }]
+      };
+    } catch (e: any) {
+      return {
+        content: [{ type: "text", text: e.message }],
+        isError: true
+      };
+    }
+  }
+
+  private async handleGetFileTestProfile(args: any) {
+    if (!args.filePath) {
+      throw new McpError(ErrorCode.InvalidParams, "filePath is required");
+    }
+
+    try {
+      const data = await this.loadReport();
+      const normalizedSearchPath = args.filePath.replace(/\\/g, '/');
+
+      const fileData = data.files.find((f: any) => {
+        return f.label === normalizedSearchPath || f.label.endsWith('/' + normalizedSearchPath);
+      });
+
+      if (!fileData) {
+        return {
+          content: [{ type: "text", text: `File not found in report: ${args.filePath}` }],
+          isError: true
+        };
+      }
+
+      const profile = {
+        file: fileData.label,
+        isTest: fileData.isTest || false,
+        hasTestFile: fileData.hasTestFile || false,
+        testFilePath: fileData.testFilePath || null,
+        testabilityScore: fileData.testabilityScore,
+        testProfile: fileData.testProfile || {},
+        testIssues: fileData.testIssues || []
+      };
+
+      return {
+        content: [{ type: "text", text: JSON.stringify(profile, null, 2) }]
+      };
+    } catch (e: any) {
+      return {
+        content: [{ type: "text", text: e.message }],
+        isError: true
+      };
+    }
   }
 
   private async loadReport() {
-      if (!this.currentReportPath) {
-           throw new McpError(ErrorCode.InvalidRequest, "No analysis has been run yet. Please run analyze_codebase first.");
-      }
-      if (!(await fs.pathExists(this.currentReportPath))) {
-          throw new McpError(ErrorCode.InvalidRequest, `Report file missing at ${this.currentReportPath}. Please analyze again.`);
-      }
-      return JSON.parse(await fs.readFile(this.currentReportPath, "utf-8"));
+    if (!this.currentReportPath) {
+      throw new McpError(ErrorCode.InvalidRequest, "No analysis has been run yet. Please run analyze_codebase first.");
+    }
+    if (!(await fs.pathExists(this.currentReportPath))) {
+      throw new McpError(ErrorCode.InvalidRequest, `Report file missing at ${this.currentReportPath}. Please analyze again.`);
+    }
+    return JSON.parse(await fs.readFile(this.currentReportPath, "utf-8"));
   }
 
   async run() {
