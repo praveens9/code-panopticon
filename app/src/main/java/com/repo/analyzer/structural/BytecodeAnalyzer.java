@@ -35,6 +35,7 @@ public class BytecodeAnalyzer {
     private final View view;
     private final List<MetricCalculator> calculators;
 
+    @SuppressWarnings("null")
     public BytecodeAnalyzer(Path classesPath) {
         AnalysisInputLocation inputLocation = new JavaClassPathAnalysisInputLocation(classesPath.toString());
         this.view = new JavaView(Collections.singletonList(inputLocation));
@@ -53,6 +54,7 @@ public class BytecodeAnalyzer {
 
     public Optional<Result> analyze(String className) {
         ClassType classType = JavaIdentifierFactory.getInstance().getClassType(className);
+        @SuppressWarnings("null")
         Optional<? extends SootClass> sootClassOpt = view.getClass(classType);
 
         if (sootClassOpt.isEmpty()) {
@@ -191,7 +193,8 @@ public class BytecodeAnalyzer {
         boolean isRecord = sootClass.getSuperclass().isPresent()
                 && sootClass.getSuperclass().get().toString().equals("java.lang.Record");
 
-        // Heuristic: Name-based check since annotation API is unavailable in this environment
+        // Heuristic: Name-based check since annotation API is unavailable in this
+        // environment
         boolean isConfiguration = className.endsWith("Configuration") || className.endsWith("Config");
 
         boolean isDataClass = isRecord || ((methodCount > 0)
@@ -242,6 +245,7 @@ public class BytecodeAnalyzer {
 
         ClassType classType = JavaIdentifierFactory.getInstance().getClassType(className);
 
+        @SuppressWarnings("null")
         Optional<? extends SootClass> sootClassOpt = view.getClass(classType);
 
         if (sootClassOpt.isEmpty()) {

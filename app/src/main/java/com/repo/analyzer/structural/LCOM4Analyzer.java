@@ -30,9 +30,6 @@ public class LCOM4Analyzer {
         Map<String, List<String>> fieldUsers = new HashMap<>();
 
         for (SootMethod method : methods) {
-            if (method.getBody() == null)
-                continue;
-
             for (Stmt stmt : method.getBody().getStmts()) {
                 String stmtStr = stmt.toString();
 
@@ -52,7 +49,9 @@ public class LCOM4Analyzer {
             }
         }
 
-        for (List<String> users : fieldUsers.values()) {
+        for (
+
+        List<String> users : fieldUsers.values()) {
             for (int i = 0; i < users.size(); i++) {
                 for (int j = i + 1; j < users.size(); j++) {
                     addEdge(graph, users.get(i), users.get(j));

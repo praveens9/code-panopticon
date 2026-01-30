@@ -25,7 +25,6 @@ public class LCOM4GraphGenerator {
         }
 
         for (SootMethod method : methods) {
-            if (method.getBody() == null) continue;
 
             for (Stmt stmt : method.getBody().getStmts()) {
                 String stmtStr = stmt.toString();
@@ -55,7 +54,8 @@ public class LCOM4GraphGenerator {
         for (Map.Entry<String, Set<String>> entry : edges.entrySet()) {
             String source = entry.getKey();
             for (String target : entry.getValue()) {
-                dot.append("  \"").append(source).append("\" -- \"").append(target).append("\" [style=dashed, label=\"calls\"];\n");
+                dot.append("  \"").append(source).append("\" -- \"").append(target)
+                        .append("\" [style=dashed, label=\"calls\"];\n");
             }
         }
 
@@ -67,7 +67,8 @@ public class LCOM4GraphGenerator {
                 if (parts.length >= 3) {
                     String parentName = parts[1];
                     if (isMethodInClass(methods, parentName)) {
-                        dot.append("  \"").append(parentName).append("\" -- \"").append(methodName).append("\" [style=dashed, color=blue, label=\"lambda\"];\n");
+                        dot.append("  \"").append(parentName).append("\" -- \"").append(methodName)
+                                .append("\" [style=dashed, color=blue, label=\"lambda\"];\n");
                     }
                 }
             }
@@ -99,9 +100,9 @@ public class LCOM4GraphGenerator {
     }
 
     private boolean isRelevant(SootMethod method) {
-        return method.isConcrete() && 
-               !method.isStatic() && 
-               !method.getName().equals("<init>") && 
-               !method.getName().equals("<clinit>");
+        return method.isConcrete() &&
+                !method.isStatic() &&
+                !method.getName().equals("<init>") &&
+                !method.getName().equals("<clinit>");
     }
 }
