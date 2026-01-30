@@ -143,6 +143,15 @@ cd code-panopticon
 ./gradlew run --args="--repo /path/to/project --hotspots-only --min-churn 5"
 ```
 
+### Test Health Metrics (New in v3.1)
+
+| Metric | Description |
+|--------|-------------|
+| **Framework Detection** | Auto-detects JUnit, TestNG, Playwright, Cypress, WebdriverIO, Jest, etc. |
+| **Assertion Count** | Number of assertions in a test file |
+| **Hardcoded Waits** | Detects `Thread.sleep`, `cy.wait`, `setTimeout` (flakiness risk) |
+| **Selector Quality** | Detects brittle XPath/CSS usage in E2E tests |
+
 ### CLI Options
 
 | Option | Description |

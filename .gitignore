@@ -57,6 +57,10 @@ push_to_personal.sh
 # Gradle
 .gradle/
 
+# Internal Docs
+docs/plan.md
+docs/research.md
+
 # Generated Reports and Graphs
 panopticon-report.html
 app/graphs/

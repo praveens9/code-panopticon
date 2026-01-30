@@ -96,6 +96,20 @@ Code Panopticon provides **refactoring pathways**:
 
 ---
 
+### 5. Tests Are Code Too
+
+Most analysis tools ignore test files. Code Panopticon treats them as first-class citizens.
+
+- **Flaky tests kill confidence.** A test that fails randomly is worse than no test.
+- **Slow tests allow decay.** If tests take 30 minutes, developers stop running them.
+- **Complex tests hide bugs.** If you need a debugger to understand a test, the test is broken.
+
+We analyze test health (assertions, waits, selectors) just as rigorously as production code.
+
+> **Principle:** Unhealthy tests are not a safety net; they are a tripwire. Maintain them or delete them.
+
+---
+
 ## The Metrics
 
 Code Panopticon combines structural analysis (code) with evolutionary analysis (git history) and social analysis (team dynamics) to generate its insights.
