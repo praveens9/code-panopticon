@@ -65,6 +65,10 @@ public class HtmlReporter {
                     .tab.active { color: #2c3e50; border-bottom: 3px solid #3498db; font-weight: bold; }
                     .tab:hover { color: #2c3e50; }
 
+                    /* Scope Toggle */
+                    .scope-btn.active { background: white !important; color: #3498db !important; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+                    .scope-btn:hover { color: #3498db !important; }
+
                     .tab-content { display: none; }
                     .tab-content.active { display: block; }
 
@@ -279,9 +283,20 @@ public class HtmlReporter {
                                                             <button id="btn-table" class="tab" onclick="switchTab('table')">Data Table</button>
                                                             <button id="btn-treemap" class="tab" onclick="switchTab('treemap')">System Map</button>
                                                             <button id="btn-network" class="tab" onclick="switchTab('network')">Coupling Graph</button>
-                                                <button id="btn-philosophy" class="tab" onclick="switchTab('philosophy')">Philosophy</button>
-
+                                                            <button id="btn-philosophy" class="tab" onclick="switchTab('philosophy')">Philosophy</button>
                                                         </div>
+
+                                                        <!-- Scope Filter -->
+                                                        <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 10px; background: #fff; padding: 10px 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+                                                            <span style="font-weight: bold; color: #2c3e50; font-size: 0.9rem;">Analysis Scope:</span>
+                                                            <div class="scope-toggle" style="display: flex; background: #eef2f7; border-radius: 4px; padding: 2px;">
+                                                                <button id="scope-prod" class="scope-btn active" onclick="setScope('prod')" style="border:none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #7f8c8d; background: transparent; transition: all 0.2s;">Production</button>
+                                                                <button id="scope-test" class="scope-btn" onclick="setScope('test')" style="border:none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #7f8c8d; background: transparent; transition: all 0.2s;">Tests</button>
+                                                                <button id="scope-all" class="scope-btn" onclick="setScope('all')" style="border:none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #7f8c8d; background: transparent; transition: all 0.2s;">All Files</button>
+                                                            </div>
+                                                        </div>
+
+
 
                                                         <!-- Dashboard Tab -->
                                                         <div id="dashboard-tab" class="tab-content active">
@@ -292,7 +307,7 @@ public class HtmlReporter {
                                                                 </div>
                                                                 <div class="stat-item" style="background: white; border-top: 4px solid #95a5a6; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Files skipped (e.g., tests, generated code)">
                                                                     <div style="font-size: 2rem; font-weight: bold; color: #7f8c8d;" id="kpi-skipped">-</div>
-                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Skipped (Tests)</div>
+                                                                    <div style="color: #7f8c8d; font-size: 0.9rem; text-transform: uppercase;">Skipped Files</div>
                                                                 </div>
                                                                 <div class="stat-item" style="background: white; border-top: 4px solid #e74c3c; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" title="Average risk score across all analyzed files">
                                                                     <div style="font-size: 2rem; font-weight: bold; color: #e74c3c;" id="kpi-risk">-</div>
@@ -362,6 +377,7 @@ public class HtmlReporter {
                                                                         <th onclick="sortTable(4)">Complexity ▼</th>
                                                                         <th onclick="sortTable(5)">LCOM4 ▼</th>
                                                                         <th onclick="sortTable(6)">Verdict ▼</th>
+                                                                        <th id="th-test-health" style="display:none">Test Health</th>
                                                                     </tr>
                                                                 </thead>
                                                                 <tbody id="tableBody"></tbody>
@@ -493,11 +509,125 @@ public class HtmlReporter {
 
                                             <script>
                                                 const stats = {{STATS_PLACEHOLDER}};
-                                                const rawData = {{DATA_PLACEHOLDER}};
+                                                const allData = {{DATA_PLACEHOLDER}};
+                                                let rawData = allData.filter(d => !d.isTest); // Default to prod only
 
-                                                const treemapData = {{TREEMAP_DATA}};
-                                                const networkData = {{NETWORK_DATA}};
+                                                let treemapData = {{TREEMAP_DATA}};
+                                                let networkData = {{NETWORK_DATA}};
                                                 let currentSort = { column: 3, ascending: false };
+                                                let currentScope = 'prod';
+                                                let verdictChartInstance = null;
+                                                let riskChartInstance = null;
+
+                                                function setScope(scope) {
+                                                    currentScope = scope;
+                                                    document.querySelectorAll('.scope-btn').forEach(btn => btn.classList.remove('active'));
+                                                    document.getElementById('scope-' + scope).classList.add('active');
+
+                                                    // Filter data
+                                                    const testHealthHeader = document.getElementById('th-test-health');
+                                                    if (scope === 'prod') {
+                                                        rawData = allData.filter(d => !d.isTest);
+                                                        if(testHealthHeader) testHealthHeader.style.display = 'none';
+                                                    } else if (scope === 'test') {
+                                                        rawData = allData.filter(d => d.isTest);
+                                                        if(testHealthHeader) testHealthHeader.style.display = 'table-cell';
+                                                    } else {
+                                                        rawData = allData;
+                                                        if(testHealthHeader) testHealthHeader.style.display = 'none';
+                                                    }
+
+                                                    // Rebuild filtered filtered datasets
+                                                    treemapData = buildHierarchy(rawData);
+                                                    networkData = buildNetwork(rawData);
+
+                                                    refreshDashboard();
+                                                }
+
+                                                // --- Client-side Data Rebuilders ---
+
+                                                function buildHierarchy(data) {
+                                                    let root = { name: "root", children: [] };
+
+                                                    data.forEach(d => {
+                                                        let parts = d.label.split('/');
+                                                        if (parts.length === 1) parts = ["Root Files", parts[0]];
+
+                                                        let current = root;
+                                                        parts.forEach((part, i) => {
+                                                            let isFile = (i === parts.length - 1);
+                                                            let child = current.children ? current.children.find(c => c.name === part) : null;
+
+                                                            if (!child) {
+                                                                child = { name: part, children: [] };
+                                                                if (isFile) {
+                                                                    child.fullName = d.label;
+                                                                    child.value = d.loc;
+                                                                    child.riskScore = d.riskScore;
+                                                                    child.verdict = d.verdict;
+                                                                    child.complexity = d.y;
+                                                                    child.churn = d.x;
+                                                                    delete child.children; // Leaf has no children
+                                                                }
+                                                                current.children.push(child);
+                                                            }
+                                                            current = child;
+                                                        });
+                                                    });
+                                                    return root;
+                                                }
+
+                                                function buildNetwork(data) {
+                                                    // Show top 50 riskiest classes that have coupling
+                                                    const topRisky = data.filter(d => d.coupled > 0)
+                                                                         .sort((a, b) => b.riskScore - a.riskScore)
+                                                                         .slice(0, 50);
+
+                                                    // Built Nodes
+                                                    const nodes = topRisky.map(d => ({
+                                                        id: d.label,
+                                                        name: d.label,
+                                                        riskScore: d.riskScore,
+                                                        coupled: d.coupled,
+                                                        verdict: d.verdict
+                                                    }));
+
+                                                    const nodeIds = new Set(nodes.map(n => n.id));
+                                                    const links = [];
+
+                                                    // Build Links
+                                                    topRisky.forEach(d => {
+                                                        if (d.coupledClassNames) {
+                                                            d.coupledClassNames.forEach(targetName => {
+                                                                // Only link if target is also in our top filtered set (to keep graph self-contained)
+                                                                // And avoid adding links twice (A->B and B->A)
+                                                                if (nodeIds.has(targetName) && d.label < targetName) {
+                                                                    links.push({
+                                                                        source: d.label,
+                                                                        target: targetName,
+                                                                        value: 1
+                                                                    });
+                                                                }
+                                                            });
+                                                        }
+                                                    });
+
+                                                    return { nodes: nodes, links: links };
+                                                }
+
+                                                function refreshDashboard() {
+                                                     initDashboard();
+                                                     if (typeof updateRiskChart === 'function') updateRiskChart();
+                                                     if (document.getElementById('table-tab').classList.contains('active') && typeof renderTable === 'function') {
+                                                         renderTable();
+                                                     }
+                                                     if (document.getElementById('treemap-tab').classList.contains('active') && typeof renderTreemap === 'function') {
+                                                         renderTreemap();
+                                                     }
+                                                     if (document.getElementById('network-tab').classList.contains('active') && typeof renderNetwork === 'function') {
+                                                         renderNetwork();
+                                                     }
+                                                }
 
                                                 // Populate verdict filter dynamically
                                                 try {
@@ -557,19 +687,25 @@ public class HtmlReporter {
                                                 // Dashboard Init
                                                 function initDashboard() {
                                                     // KPIs
-                                                    document.getElementById('kpi-analyzed').textContent = stats.analyzed;
+                                                    document.getElementById('kpi-analyzed').textContent = rawData.length;
                                                     document.getElementById('kpi-skipped').textContent = stats.skipped;
-                                                    const avgRisk = rawData.reduce((sum, d) => sum + d.riskScore, 0) / (rawData.length || 1);
+
+                                                    const avgRisk = rawData.length ? rawData.reduce((sum, d) => sum + d.riskScore, 0) / rawData.length : 0;
                                                     document.getElementById('kpi-risk').textContent = avgRisk.toFixed(1);
+
                                                     const totalLoc = rawData.reduce((sum, d) => sum + d.loc, 0);
                                                     document.getElementById('kpi-loc').textContent = totalLoc.toLocaleString();
 
                                                     // Scan Summary
                                                     const highRisks = rawData.filter(d => d.riskScore > 5).sort((a,b) => b.riskScore - a.riskScore);
                                                     const highRiskCount = highRisks.length;
-                                                    const primaryLang = [...new Set(rawData.map(d => d.language || 'generic'))].sort((a,b) =>
-                                                        rawData.filter(d => d.language === b).length - rawData.filter(d => d.language === a).length
-                                                    )[0] || 'Generic'; // Mode language
+
+                                                    let primaryLang = 'N/A';
+                                                    if (rawData.length > 0) {
+                                                         primaryLang = [...new Set(rawData.map(d => d.language || 'generic'))].sort((a,b) =>
+                                                            rawData.filter(d => d.language === b).length - rawData.filter(d => d.language === a).length
+                                                        )[0] || 'Generic'; // Mode language
+                                                    }
 
                                                     let hotspotDetail = "";
                                                     if (highRiskCount === 0) {
@@ -581,8 +717,10 @@ public class HtmlReporter {
                                                         hotspotDetail = `The highest risk file is <code>${highRisks[0].label}</code> (Risk: ${highRisks[0].riskScore.toFixed(1)}).`;
                                                     }
 
+                                                    let scopeName = currentScope === 'prod' ? 'Production Code' : (currentScope === 'test' ? 'Test Code' : 'All Files');
+
                                                     const summaryText = `
-                                                        scanned <strong>${stats.analyzed} files</strong> (skipped ${stats.skipped} test files).
+                                                        Viewing <strong>${scopeName}</strong>. Found <strong>${rawData.length} files</strong>.
                                                         The codebase is primarily <strong>${primaryLang}</strong>.
                                                         We found <strong>${highRiskCount} hotspots</strong> (Risk Score > 5) that require attention.
                                                         ${hotspotDetail}
@@ -621,7 +759,9 @@ public class HtmlReporter {
                                                         const verdictLabels = Object.keys(verdictCounts);
                                                         const verdictValues = Object.values(verdictCounts);
 
-                                                        new Chart(document.getElementById('verdictChart'), {
+                                                        if (verdictChartInstance) verdictChartInstance.destroy();
+
+                                                        verdictChartInstance = new Chart(document.getElementById('verdictChart'), {
                                                             type: 'doughnut',
                                                             data: {
                                                                 labels: verdictLabels,
@@ -661,7 +801,8 @@ public class HtmlReporter {
                                                 // Run init - AFTER helpers are defined
                                                 try { initDashboard(); } catch(e) { console.error("Dashboard init error", e); }
 
-                                                const ctx = document.getElementById('riskChart').getContext('2d');
+                                                function updateRiskChart() {
+                                                    const ctx = document.getElementById('riskChart').getContext('2d');
 
                                                 // Calculate dynamic axis bounds based on data
                                                 const maxChurn = Math.max(...rawData.map(d => d.x), 10);
@@ -697,7 +838,9 @@ public class HtmlReporter {
             """;
     private static String TEMPLATE_BODY_PART1_B = """
 
-                                        const chart = new Chart(ctx, {
+                                        if (riskChartInstance) riskChartInstance.destroy();
+
+                                        riskChartInstance = new Chart(ctx, {
                                             type: 'bubble',
                                             data: {
                                                 datasets: [{
@@ -712,7 +855,7 @@ public class HtmlReporter {
                                                 responsive: true,
                                                 maintainAspectRatio: false,
                                                 onClick: (e) => {
-                                                    const points = chart.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
+                                                    const points = riskChartInstance.getElementsAtEventForMode(e, 'nearest', { intersect: true }, true);
                                                     if (points.length) showDetails(rawData[points[0].index]);
                                                 },
                                                 plugins: {
@@ -739,6 +882,10 @@ public class HtmlReporter {
                                             },
                                             plugins: [backgroundZones]
                                         });
+                                        }
+
+                                        // Initial call
+                                        try { updateRiskChart(); } catch(e) { console.error("Risk chart init error", e); }
 
                                         // Side Panel Details
                                         function showDetails(d) {
@@ -793,6 +940,16 @@ public class HtmlReporter {
                                                     <h2>${d.label}</h2>
                                                     <span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span>
                                                 </div>
+                                                ${(d.testIssues && d.testIssues.length > 0) ? `
+                                                    <div style="background: #fff1f2; border: 1px solid #fda4af; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+                                                        <h3 style="margin: 0 0 10px 0; font-size: 1rem; color: #be123c; display: flex; align-items: center; gap: 8px;">
+                                                            <span>⚠️</span> Test Health Issues
+                                                        </h3>
+                                                        <ul style="margin:0; padding-left:20px; color: #881337;">
+                                                            ${d.testIssues.map(issue => `<li>${issue}</li>`).join('')}
+                                                        </ul>
+                                                    </div>
+                                                ` : ''}
                                                 ${socialSection}
                                                 <div class="stat-grid">
                                                     <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
@@ -871,6 +1028,7 @@ public class HtmlReporter {
                                                     <td>${d.y.toFixed(0)}</td>
                                                     <td>${d.lcom4.toFixed(1)}</td>
                                                     <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
+                                                    ${currentScope === 'test' ? `<td>${(d.testIssues || []).map(i => `<span style="font-size:0.8rem; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; margin-right:4px;">${i}</span>`).join('')}</td>` : ''}
                                                 </tr>
                                             `;}).join('');
                                         }

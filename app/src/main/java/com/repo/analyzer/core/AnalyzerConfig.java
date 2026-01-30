@@ -30,8 +30,14 @@ public class AnalyzerConfig {
 
     // Exclusion patterns
     private Set<String> exclusions = Set.of(
-            "**/test/**", "**/tests/**", "**/*Test.java", "**/*_test.py",
-            "**/node_modules/**", "**/vendor/**", "**/__pycache__/**");
+            "**/node_modules/**", "**/vendor/**", "**/__pycache__/**",
+            "**/.git/**", "**/.gradle/**", "**/build/**");
+
+    // Test patterns
+    private Set<String> testPatterns = Set.of(
+            "**/test/**", "**/tests/**", "**/*Test.java", "**/*Tests.java",
+            "**/*_test.py", "**/*.test.ts", "**/*.spec.ts",
+            "**/*.test.js", "**/*.spec.js");
 
     // Treemap settings
     private int treemapMaxFiles = 100;
@@ -250,6 +256,20 @@ public class AnalyzerConfig {
             }
         }
         return false;
+    }
+
+    public boolean isTestFile(Path path) {
+        String pathStr = path.toString();
+        for (String pattern : testPatterns) {
+            if (matchesGlob(pathStr, pattern)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public Set<String> getTestPatterns() {
+        return testPatterns;
     }
 
     private boolean matchesGlob(String path, String glob) {

@@ -33,15 +33,26 @@ weights:
   complexity: 1.0
   coupling: 0.1
 
-# Glob patterns to exclude from analysis
+# Glob patterns to exclude from analysis (Noise, dependencies, binary artifacts)
 exclusions:
-  - "**/test/**"
-  - "**/tests/**"
-  - "**/*Test.java"
-  - "**/*_test.py"
   - "**/node_modules/**"
   - "**/vendor/**"
   - "**/__pycache__/**"
+  - "**/.git/**"
+  - "**/.gradle/**"
+  - "**/build/**"
+
+# Glob patterns to identify Test code (Analyzed but tagged as 'Test')
+test_patterns:
+  - "**/test/**"
+  - "**/tests/**"
+  - "**/*Test.java"
+  - "**/*Tests.java"
+  - "**/*_test.py"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  - "**/*.test.js"
+  - "**/*.spec.js"
 
 # Treemap visualization settings
 treemap:

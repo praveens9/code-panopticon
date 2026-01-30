@@ -10,10 +10,12 @@ import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
 import com.repo.analyzer.report.JsonDataConverter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
+import com.repo.analyzer.test.TestQualityAnalyzer;
 import com.repo.analyzer.testability.TestabilityAnalyzer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -209,6 +211,7 @@ public class PolyglotApp {
         System.out.println("\n>>> PHASE 2: ANALYZING STRUCTURE <<<");
         ForensicRuleEngine ruleEngine = new ForensicRuleEngine();
         TestabilityAnalyzer testabilityAnalyzer = new TestabilityAnalyzer(repoPath);
+        TestQualityAnalyzer testQualityAnalyzer = new TestQualityAnalyzer();
         List<AnalysisData> reportData = new ArrayList<>();
 
         // Print header
@@ -224,16 +227,12 @@ public class PolyglotApp {
 
         for (String relativePath : filesToAnalyze) {
             processed++;
-            // Skip test files
-            if (relativePath.contains("/test/") || relativePath.contains("Test.")) {
-                skipped++;
-                continue;
-            }
-
             Path filePath = repoPath.resolve(relativePath);
             if (!Files.exists(filePath)) {
                 continue;
             }
+
+            boolean isTest = config.isTestFile(Paths.get(relativePath));
 
             // Analyze with appropriate analyzer
             Optional<FileMetrics> metricsOpt = registry.analyze(filePath, config);
@@ -274,6 +273,12 @@ public class PolyglotApp {
             boolean isUntestedHotspot = testabilityAnalyzer.isUntestedHotspot(
                     hasTestFile, riskScore, churn);
 
+            // Test Quality Analysis
+            List<String> testIssues = new ArrayList<>();
+            if (isTest) {
+                testIssues = testQualityAnalyzer.analyze(filePath);
+            }
+
             reportData.add(new AnalysisData(
                     className,
                     churn,
@@ -306,7 +311,10 @@ public class PolyglotApp {
                     hasTestFile,
                     testFilePath,
                     testabilityScore,
-                    isUntestedHotspot));
+
+                    isUntestedHotspot,
+                    isTest,
+                    testIssues));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(
@@ -319,6 +327,10 @@ public class PolyglotApp {
                     verdict));
 
             analyzed++;
+            // if (isTest) skipped++; // Removed: Tests are now analyzed, not skipped
+            // User view: Skipped usually means ignored. Let's rename in output or add new
+            // metric.
+            // For now, let's just count Analyzed = total. But maybe we want separate stats.
 
             // Progress update
             if (processed % 50 == 0 || processed == totalFiles) {
@@ -328,7 +340,7 @@ public class PolyglotApp {
         }
         System.out.println(); // Newline after progress
 
-        System.out.printf("%nAnalyzed: %d files | Skipped: %d test files%n", analyzed, skipped);
+        System.out.printf("%nAnalyzed: %d files | Skipped: %d%n", analyzed, skipped);
 
         // Phase 3: Generate Reports
         System.out.println("\n>>> PHASE 3: GENERATING REPORTS <<<");
