@@ -64,6 +64,8 @@ app/graphs/
 reports/
 app/bin/
 panopticon-reports/
+report_output/
+external_report*/
 
 # MCP Wrapper
 mcp-wrapper/node_modules/
