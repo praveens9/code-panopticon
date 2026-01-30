@@ -435,7 +435,7 @@ public class HtmlReporter {
                                                         </p>
                                                     </div>
 
-                                                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 40px;">
+                                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px;">
                                                         <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #3498db;">
                                                             <div style="font-size: 2rem; margin-bottom: 10px;">📐</div>
                                                             <h3 style="margin: 0 0 10px 0; color: #34495e;">Structure</h3>
@@ -450,6 +450,11 @@ public class HtmlReporter {
                                                             <div style="font-size: 2rem; margin-bottom: 10px;">👥</div>
                                                             <h3 style="margin: 0 0 10px 0; color: #34495e;">Social</h3>
                                                             <p style="font-size: 0.9rem; color: #7f8c8d;">Knowledge Islands, Bus Factor. Who owns this code?</p>
+                                                        </div>
+                                                        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; border-top: 4px solid #9b59b6;">
+                                                            <div style="font-size: 2rem; margin-bottom: 10px;">🧪</div>
+                                                            <h3 style="margin: 0 0 10px 0; color: #34495e;">Safety</h3>
+                                                            <p style="font-size: 0.9rem; color: #7f8c8d;">Tests are code too. Unhealthy tests are a tripwire, not a safety net.</p>
                                                         </div>
                                                     </div>
 
