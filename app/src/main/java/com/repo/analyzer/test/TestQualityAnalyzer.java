@@ -25,10 +25,41 @@ public class TestQualityAnalyzer {
     private static final Pattern XPATH_USAGE = Pattern.compile("By\\.xpath|xpath\\s*\\(");
     private static final Pattern CSS_USAGE = Pattern.compile("By\\.cssSelector|css\\s*\\(");
 
-    public List<String> analyze(Path file) {
+    public record Result(List<String> issues, java.util.Map<String, String> stats) {
+    }
+
+    public Result analyze(Path file) {
         List<String> issues = new ArrayList<>();
+        java.util.Map<String, String> stats = new java.util.HashMap<>();
+
         try {
             String content = Files.readString(file);
+
+            // Detect Test Framework
+            String framework = "Unknown";
+            if (content.contains("org.junit"))
+                framework = "JUnit";
+            else if (content.contains("org.testng"))
+                framework = "TestNG";
+            else if (content.contains("cypress"))
+                framework = "Cypress";
+            else if (content.contains("playwright"))
+                framework = "Playwright";
+            else if (content.contains("from unittest"))
+                framework = "unittest (Python)";
+            else if (content.contains("import pytest"))
+                framework = "pytest";
+            stats.put("Framework", framework);
+
+            // Detect Mocking
+            if (content.contains("Mockito") || content.contains("mock("))
+                stats.put("Mocking", "Mockito/Mock");
+            if (content.contains("jest.fn()"))
+                stats.put("Mocking", "Jest");
+
+            // Count Assertions
+            long assertCount = count(content, ASSERT_PATTERN);
+            stats.put("Assertions", String.valueOf(assertCount));
 
             // Check for Hardcoded Waits
             if (find(content, THREAD_SLEEP) || find(content, AWAIT_DELAY) ||
@@ -37,30 +68,20 @@ public class TestQualityAnalyzer {
             }
 
             // Check for low-level selectors in what should be high-level tests
-            // (Heuristic: If file uses By.xpath multiple times, it might be brittle)
             long xpathCount = count(content, XPATH_USAGE);
             if (xpathCount > 5) {
                 issues.add("Heavy XPath Usage (" + xpathCount + ")");
             }
 
             // Check Assertion Density
-            // A heuristic: if it's a test file but has NO assertions, it's a "Smoke Test"
-            // or useless
-            // but we need to be careful about @Test annotation presence vs helper files
-            // For now, let's just count them.
-            // If it has > 0 asserts, checking for "Assertion Roulette" (too many)
-            long assertCount = count(content, ASSERT_PATTERN);
-            if (assertCount == 0) {
-                // Maybe it's a helper? Or maybe it's a test without assert.
-                // safe to skip flagging "No Assertions" aggressively to avoid noise for helpers
-            } else if (assertCount > 20) {
+            if (assertCount > 20) {
                 issues.add("Assertion Roulette (>20 assertions)");
             }
 
         } catch (IOException e) {
             System.err.println("Could not read test file for quality analysis: " + file);
         }
-        return issues;
+        return new Result(issues, stats);
     }
 
     private boolean find(String content, Pattern p) {

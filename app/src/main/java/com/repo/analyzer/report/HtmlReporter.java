@@ -950,6 +950,21 @@ public class HtmlReporter {
                                                         </ul>
                                                     </div>
                                                 ` : ''}
+                                                ${(d.testProfile && Object.keys(d.testProfile).length > 0) ? `
+                                                    <div style="background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); padding: 15px; border-radius: 8px; margin-bottom: 20px; color: white;">
+                                                        <h3 style="margin: 0 0 12px 0; font-size: 1rem; display: flex; align-items: center; gap: 8px;">
+                                                            <span style="font-size: 1.2rem;">🧪</span> Test Profile
+                                                        </h3>
+                                                        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;">
+                                                            ${Object.entries(d.testProfile).map(([k, v]) => `
+                                                                <div style="background: rgba(255,255,255,0.15); padding: 8px; border-radius: 6px;">
+                                                                    <div style="font-size: 0.7rem; opacity: 0.8; text-transform: uppercase;">${k}</div>
+                                                                    <div style="font-weight: bold; font-size: 0.9rem;">${v}</div>
+                                                                </div>
+                                                            `).join('')}
+                                                        </div>
+                                                    </div>
+                                                ` : ''}
                                                 ${socialSection}
                                                 <div class="stat-grid">
                                                     <div class="stat-item"><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>

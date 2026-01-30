@@ -275,8 +275,11 @@ public class PolyglotApp {
 
             // Test Quality Analysis
             List<String> testIssues = new ArrayList<>();
+            java.util.Map<String, String> testProfile = new java.util.HashMap<>();
             if (isTest) {
-                testIssues = testQualityAnalyzer.analyze(filePath);
+                TestQualityAnalyzer.Result result = testQualityAnalyzer.analyze(filePath);
+                testIssues = result.issues();
+                testProfile = result.stats();
             }
 
             reportData.add(new AnalysisData(
@@ -314,7 +317,8 @@ public class PolyglotApp {
 
                     isUntestedHotspot,
                     isTest,
-                    testIssues));
+                    testIssues,
+                    testProfile));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(
