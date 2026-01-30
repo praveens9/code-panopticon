@@ -36,17 +36,39 @@ public class TestQualityAnalyzer {
 
             // Detect Test Framework
             String framework = "Unknown";
+            String fileName = file.getFileName().toString();
+
+            // Java
             if (content.contains("org.junit"))
                 framework = "JUnit";
             else if (content.contains("org.testng"))
                 framework = "TestNG";
+
+            // JS / TS - Prioritize explicit frameworks
             else if (content.contains("cypress") || content.contains("cy.visit"))
                 framework = "Cypress";
             else if (content.contains("playwright") || content.contains("@playwright/test"))
                 framework = "Playwright";
-            else if (content.contains("jest") || content.contains("describe(") || content.contains("test("))
-                // Simple Jest/Mocha heuristic if no explicit import found
-                framework = "Jest/Mocha";
+            else if (content.contains("webdriverio") || content.contains("browser.url")
+                    || (content.contains("$(") && content.contains("await")))
+                framework = "WebdriverIO";
+
+            // Ambiguous JS/TS Runners (Jest, Mocha, Jasmine, Playwright-Test)
+            else if (content.contains("jest") || content.contains("describe(") || content.contains("test(")
+                    || content.contains("it(")) {
+                if (content.contains("expect(") && (fileName.endsWith(".spec.ts") || fileName.endsWith(".spec.js"))) {
+                    // .spec.ts + expect() is strongly indicative of Playwright default runner
+                    framework = "Playwright";
+                } else if (content.contains("jest") || content.contains("mock(") || content.contains("spyOn")) {
+                    framework = "Jest";
+                } else if (content.contains("jasmine")) {
+                    framework = "Jasmine";
+                } else {
+                    framework = "Jest/Mocha";
+                }
+            }
+
+            // Python
             else if (content.contains("from unittest"))
                 framework = "unittest (Python)";
             else if (content.contains("import pytest"))

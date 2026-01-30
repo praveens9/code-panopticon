@@ -278,7 +278,35 @@ public class AnalyzerConfig {
                 .replace("**", "<<<DOUBLESTAR>>>")
                 .replace("*", "[^/]*")
                 .replace("<<<DOUBLESTAR>>>", ".*");
-        return path.matches(".*" + regex + ".*");
+
+        // Handle leading **/
+        if (regex.startsWith(".*")) {
+            // If looks like .*/foo, make the slash optional or handle start anchor
+            // But simpler: just use implicit usually.
+            // Problem: "**/foo" -> ".*?/foo" or "(?:.*/)?foo"
+        }
+
+        // Better approach: Use standard glob-to-regex conversion logic or use
+        // FileSystemMatcher if possible.
+        // But since we are string based:
+        // "**/test/**" -> "((.*/)|^)test(/.*)?"
+
+        // Let's restart the regex build for robustness:
+        StringBuilder sb = new StringBuilder();
+        if (glob.startsWith("**/")) {
+            sb.append("(?:.*/|^)");
+            glob = glob.substring(3);
+        }
+
+        // Replace remainder - Use placeholders to prevent collision
+        String doc = glob
+                .replace("**", "___DOUBLESTAR___")
+                .replace("*", "[^/]*")
+                .replace("?", ".")
+                .replace("___DOUBLESTAR___", ".*");
+
+        sb.append(doc);
+        return path.matches(sb.toString());
     }
 
     public AnalyzerConfig withCompiledClassesPath(Path path) {
