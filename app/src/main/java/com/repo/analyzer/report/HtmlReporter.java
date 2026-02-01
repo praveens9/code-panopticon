@@ -524,7 +524,7 @@ public class HtmlReporter {
                                                 let treemapData = {{TREEMAP_DATA}};
                                                 let networkData = {{NETWORK_DATA}};
                                                 let currentSort = { column: 3, ascending: false };
-                                                let currentScope = 'prod';
+                                                let currentScope = null;
                                                 let verdictChartInstance = null;
                                                 let riskChartInstance = null;
 
