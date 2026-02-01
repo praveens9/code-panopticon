@@ -119,31 +119,121 @@ The system uses a strict priority engine. Even if a file has multiple issues (e.
 - Python 3 (for Python analysis)
 - Node.js (optional, for ESLint-based JS analysis)
 
-### Analyze a Repository
+### Quick Start
 
 ```bash
-# 1. Clone and build
-git clone <repo-url>
+# Clone and build
+git clone https://github.com/praveens9/code-panopticon.git
 cd code-panopticon
 ./gradlew compileJava
-
-# 2. Analyze a local repo with Java bytecode
-./gradlew run --args="--repo /path/to/project --classes /path/to/compiled/classes" --console=plain
-
-# 3. Analyze a local repo (Python, JS, etc.)
-./gradlew run --args="--repo /path/to/project" --console=plain
-
-# 4. Analyze a remote GitHub repo (auto-clones)
-./gradlew run --args="--repo https://github.com/user/repo" --console=plain
-
-# 5. Keep the cloned repo after analysis
-./gradlew run --args="--repo https://github.com/user/repo --keep-clone" --console=plain
-
-# 6. Large repo mode (only analyze hotspots)
-./gradlew run --args="--repo /path/to/project --hotspots-only --min-churn 5"
 ```
 
-### Test Health Metrics (New in v3.1)
+---
+
+## 📖 CLI Reference
+
+All options are passed via `--args="..."` to Gradle. The `--console=plain` flag (Gradle option) provides cleaner output.
+
+### Required Options
+
+| Option | Description |
+|--------|-------------|
+| `--repo <path\|url>` | Path to local Git repository **or** GitHub URL |
+
+### Optional Options
+
+| Option | Description | Default |
+|--------|-------------|---------|
+| `--classes <path>` | Path to compiled Java `.class` files (for bytecode analysis) | None |
+| `--output <dir>` | Output directory for reports | `reports/` |
+| `--hotspots-only` | Only analyze files with Git activity (faster for large repos) | Off |
+| `--min-churn <n>` | Minimum commits to include a file (use with `--hotspots-only`) | 1 |
+| `--keep-clone` | Keep cloned repo after analysis (for remote URLs) | Off |
+
+---
+
+### Usage Examples
+
+#### 1. Analyze a Local Repository
+
+Analyze the code-panopticon repo itself:
+
+```bash
+./gradlew run --args="--repo ." --console=plain
+```
+
+**Expected output:**
+- `reports/panopticon-report.html` — Interactive HTML report
+- `reports/panopticon-report.csv` — CSV export
+- `reports/panopticon-data.json` — Raw JSON data
+
+---
+
+#### 2. Analyze a Remote GitHub Repository
+
+Analyze any public GitHub repo (auto-clones to temp directory):
+
+```bash
+./gradlew run --args="--repo https://github.com/praveens9/code-panopticon" --console=plain
+```
+
+The repo is cloned to a temp folder and deleted after analysis.
+
+---
+
+#### 3. Hotspots-Only Mode (Large Repos)
+
+For large codebases, analyze only files with Git activity:
+
+```bash
+./gradlew run --args="--repo . --hotspots-only" --console=plain
+```
+
+Combine with `--min-churn` to filter by minimum commits:
+
+```bash
+./gradlew run --args="--repo . --hotspots-only --min-churn 5" --console=plain
+```
+
+This skips files with fewer than 5 commits—useful for focusing on actively maintained code.
+
+---
+
+#### 4. Java Bytecode Analysis
+
+For deeper Java analysis (cohesion, coupling), provide compiled classes:
+
+```bash
+./gradlew run --args="--repo . --classes ./app/build/classes/java/main" --console=plain
+```
+
+---
+
+#### 5. Keep Cloned Repository
+
+When analyzing remote repos, keep the clone for inspection:
+
+```bash
+./gradlew run --args="--repo https://github.com/praveens9/code-panopticon --keep-clone" --console=plain
+```
+
+The repo path is printed at the end for reference.
+
+---
+
+#### 6. Custom Output Directory
+
+Save reports to a specific folder:
+
+```bash
+./gradlew run --args="--repo . --output ./my-reports" --console=plain
+```
+
+---
+
+## � Test Health Metrics
+
+Code Panopticon treats **tests as code too**. When viewing test files, the UI shows test-specific metrics.
 
 | Metric | Description |
 |--------|-------------|
@@ -152,9 +242,9 @@ cd code-panopticon
 | **Hardcoded Waits** | Detects `Thread.sleep`, `cy.wait`, `setTimeout` (flakiness risk) |
 | **Selector Quality** | Detects brittle XPath/CSS usage in E2E tests |
 
-#### Test Smells Detected
+### Test Smells Detected
 
-The UI now includes dedicated test-specific diagnostics:
+The UI includes dedicated test-specific diagnostics:
 
 | Smell | What It Means | Action |
 |-------|---------------|--------|
@@ -164,20 +254,9 @@ The UI now includes dedicated test-specific diagnostics:
 | **Hardcoded Waits** | Uses `sleep()`, `cy.wait()`, etc. | Use explicit waits |
 | **Brittle Selectors** | Uses fragile XPath/CSS | Use data-testid |
 
-
-### CLI Options
-
-| Option | Description |
-|--------|-------------|
-| `--repo <path\|url>` | Path or URL to Git repository (required) |
-| `--classes <path>` | Path to compiled Java classes (optional) |
-| `--output <dir>` | Output directory for reports (default: `reports/`) |
-| `--hotspots-only` | Only analyze files with Git activity |
-| `--min-churn <n>` | Minimum churn to include a file |
-| `--keep-clone` | Keep cloned repo (for remote URLs) |
 ---
 
-## 🤖 AI Agent Integration (MCP)
+## �🤖 AI Agent Integration (MCP)
 
 Code Panopticon includes a **Model Context Protocol (MCP)** server, identifying it as a "Smart Tool" for AI agents (like Claude Desktop).
 
