@@ -367,6 +367,9 @@ public class HtmlReporter {
                                                                 <select id="verdictFilter">
                                                                     <option value="">All Verdicts</option>
                                                                 </select>
+                                                                <select id="testHealthFilter" style="display:none">
+                                                                    <option value="">All Test Health</option>
+                                                                </select>
                                                             </div>
                                                             <table id="dataTable">
                                                                 <thead>
@@ -532,21 +535,28 @@ public class HtmlReporter {
 
                                                     // Filter data
                                                     const testHealthHeader = document.getElementById('th-test-health');
+                                                    const testHealthFilter = document.getElementById('testHealthFilter');
                                                     if (scope === 'prod') {
                                                         rawData = allData.filter(d => !d.isTest);
                                                         if(testHealthHeader) testHealthHeader.style.display = 'none';
+                                                        if(testHealthFilter) testHealthFilter.style.display = 'none';
                                                     } else if (scope === 'test') {
                                                         rawData = allData.filter(d => d.isTest);
                                                         if(testHealthHeader) testHealthHeader.style.display = 'table-cell';
+                                                        if(testHealthFilter) testHealthFilter.style.display = 'block';
                                                     } else {
                                                         rawData = allData;
                                                         // Show Test Health in 'All' view too, as it's useful context
                                                         if(testHealthHeader) testHealthHeader.style.display = 'table-cell';
+                                                        if(testHealthFilter) testHealthFilter.style.display = 'block';
                                                     }
 
                                                     // Rebuild filtered filtered datasets
                                                     treemapData = buildHierarchy(rawData);
                                                     networkData = buildNetwork(rawData);
+
+                                                    // Repopulate test health filter with smells from current data
+                                                    if (typeof populateTestHealthFilter === 'function') populateTestHealthFilter();
 
                                                     refreshDashboard();
                                                 }
@@ -650,6 +660,25 @@ public class HtmlReporter {
                                                     }
                                                 } catch (e) { console.error("Error populating filter", e); }
 
+                                                // Populate test health filter dynamically
+                                                function populateTestHealthFilter() {
+                                                    const filterSelect = document.getElementById('testHealthFilter');
+                                                    if (!filterSelect) return;
+                                                    // Reset to default
+                                                    filterSelect.innerHTML = '<option value="">All Test Health</option><option value="OK">✅ Healthy</option>';
+                                                    // Collect unique smells from test files
+                                                    const testFiles = rawData.filter(d => d.isTest);
+                                                    const allSmells = new Set();
+                                                    testFiles.forEach(d => (d.testIssues || []).forEach(s => allSmells.add(s)));
+                                                    [...allSmells].sort().forEach(smell => {
+                                                        const option = document.createElement('option');
+                                                        option.value = smell;
+                                                        option.textContent = '⚠️ ' + smell;
+                                                        filterSelect.appendChild(option);
+                                                    });
+                                                }
+                                                populateTestHealthFilter();
+
 
 
                                                 // Fix: Hide loading overlay immediately as data is embedded
@@ -740,7 +769,7 @@ public class HtmlReporter {
                                                     document.getElementById('summary-text').innerHTML = summaryText;
 
 
-                                                    // Top Risks
+                                                    // Top Risks - For test scope, show test health instead of verdict
                                                     const topRisks = [...rawData].sort((a, b) => b.riskScore - a.riskScore).slice(0, 5);
                                                     const list = document.getElementById('top-risks-list');
                                                     list.innerHTML = ''; // Clear existing
@@ -751,6 +780,17 @@ public class HtmlReporter {
                                                         item.onmouseover = () => item.style.background = '#f9f9f9';
                                                         item.onmouseout = () => item.style.background = '#fff';
 
+                                                        // For test files, show test health; for prod show verdict
+                                                        let badge;
+                                                        if (d.isTest && d.testIssues && d.testIssues.length > 0) {
+                                                            const primary = d.testIssues[0].split('(')[0].trim();
+                                                            badge = `<span style="font-size: 0.8rem; background: #f39c12; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${primary}</span>`;
+                                                        } else if (d.isTest) {
+                                                            badge = `<span style="font-size: 0.8rem; background: #27ae60; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">Healthy</span>`;
+                                                        } else {
+                                                            badge = `<span style="font-size: 0.8rem; background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${d.verdict}</span>`;
+                                                        }
+
                                                         item.innerHTML = `
                                                             <div style="font-weight: bold; color: #95a5a6; width: 30px; font-size: 1.1rem; flex-shrink: 0;">${i+1}.</div>
                                                             <div style="flex: 1; overflow: hidden; padding-right: 10px; min-width: 0;">
@@ -758,29 +798,57 @@ public class HtmlReporter {
                                                             </div>
                                                             <div style="text-align: right; min-width: 140px;">
                                                                 <span style="font-weight: bold; color: ${riskColor};">Risk: ${d.riskScore.toFixed(1)}</span>
-                                                                <span style="font-size: 0.8rem; background: ${riskColor}; color: white; padding: 2px 6px; border-radius: 4px; margin-left: 6px;">${d.verdict}</span>
+                                                                ${badge}
                                                             </div>
                                                         `;
                                                         list.appendChild(item);
                                                     });
 
-                                                    // Verdict Chart
+                                                    // Verdict Chart (or Test Health Chart for test scope)
                                                     if (typeof Chart !== 'undefined') {
-                                                        const verdictCounts = {};
-                                                        rawData.forEach(d => { verdictCounts[d.verdict] = (verdictCounts[d.verdict] || 0) + 1; });
-                                                        const verdictLabels = Object.keys(verdictCounts);
-                                                        const verdictValues = Object.values(verdictCounts);
+                                                        let chartLabels, chartValues, chartTitle;
+
+                                                        if (currentScope === 'test') {
+                                                            // For test scope, show test health distribution
+                                                            const healthCounts = { 'OK': 0 };
+                                                            rawData.forEach(d => {
+                                                                if (!d.testIssues || d.testIssues.length === 0) {
+                                                                    healthCounts['OK']++;
+                                                                } else {
+                                                                    d.testIssues.forEach(issue => {
+                                                                        healthCounts[issue] = (healthCounts[issue] || 0) + 1;
+                                                                    });
+                                                                }
+                                                            });
+                                                            chartLabels = Object.keys(healthCounts).filter(k => healthCounts[k] > 0);
+                                                            chartValues = chartLabels.map(k => healthCounts[k]);
+                                                            chartTitle = 'Test Health Distribution';
+                                                        } else {
+                                                            // For prod/all scope, show verdict distribution
+                                                            const verdictCounts = {};
+                                                            rawData.forEach(d => { verdictCounts[d.verdict] = (verdictCounts[d.verdict] || 0) + 1; });
+                                                            chartLabels = Object.keys(verdictCounts);
+                                                            chartValues = Object.values(verdictCounts);
+                                                            chartTitle = 'Verdict Distribution';
+                                                        }
 
                                                         if (verdictChartInstance) verdictChartInstance.destroy();
+
+                                                        // Update chart title
+                                                        const chartContainer = document.getElementById('verdictChart').parentElement;
+                                                        const titleEl = chartContainer.querySelector('h2');
+                                                        if (titleEl) titleEl.textContent = chartTitle;
 
                                                         verdictChartInstance = new Chart(document.getElementById('verdictChart'), {
                                                             type: 'doughnut',
                                                             data: {
-                                                                labels: verdictLabels,
+                                                                labels: chartLabels,
                                                                 datasets: [{
-                                                                    data: verdictValues,
-                                                                    backgroundColor: verdictLabels.map(v => {
-                                                                        const d = {verdict: v}; // Mock for color function
+                                                                    data: chartValues,
+                                                                    backgroundColor: chartLabels.map(v => {
+                                                                        if (v === 'OK') return '#27ae60';
+                                                                        if (currentScope === 'test') return '#f39c12'; // Test issues = amber
+                                                                        const d = {verdict: v};
                                                                         return getRiskColor(d);
                                                                     })
                                                                 }]
@@ -794,13 +862,18 @@ public class HtmlReporter {
                                                                 onClick: (e, elements) => {
                                                                     if (elements.length > 0) {
                                                                         const index = elements[0].index;
-                                                                        const verdict = verdictLabels[index];
-                                                                        // Filter table by verdict and switch tab
-                                                                        const filterSelect = document.getElementById('verdictFilter');
-                                                                        if(filterSelect) filterSelect.value = verdict;
-                                                                        switchTab('table');
-                                                                        // Trigger change event if needed for table filter
-                                                                        filterSelect.dispatchEvent(new Event('change'));
+                                                                        const label = chartLabels[index];
+                                                                        if (currentScope === 'test') {
+                                                                            const filterSelect = document.getElementById('testHealthFilter');
+                                                                            if(filterSelect) filterSelect.value = label;
+                                                                            switchTab('table');
+                                                                            filterSelect.dispatchEvent(new Event('change'));
+                                                                        } else {
+                                                                            const filterSelect = document.getElementById('verdictFilter');
+                                                                            if(filterSelect) filterSelect.value = label;
+                                                                            switchTab('table');
+                                                                            filterSelect.dispatchEvent(new Event('change'));
+                                                                        }
                                                                     }
                                                                 }
                                                             }
@@ -1024,9 +1097,19 @@ public class HtmlReporter {
                                             const tbody = document.getElementById('tableBody');
                                             const classFilter = document.getElementById('classFilter').value.toLowerCase();
                                             const verdictFilter = document.getElementById('verdictFilter').value;
+                                            const testHealthFilterVal = document.getElementById('testHealthFilter').value;
 
                                             let filtered = rawData.filter(d => {
-                                                return d.label.toLowerCase().includes(classFilter) && (!verdictFilter || d.verdict === verdictFilter);
+                                                const matchesClass = d.label.toLowerCase().includes(classFilter);
+                                                const matchesVerdict = !verdictFilter || d.verdict === verdictFilter;
+                                                // Test health filter: OK for healthy, or match specific smell name
+                                                let matchesTestHealth = !testHealthFilterVal;
+                                                if (testHealthFilterVal === 'OK') {
+                                                    matchesTestHealth = !d.testIssues || d.testIssues.length === 0;
+                                                } else if (testHealthFilterVal) {
+                                                    matchesTestHealth = d.testIssues && d.testIssues.includes(testHealthFilterVal);
+                                                }
+                                                return matchesClass && matchesVerdict && matchesTestHealth;
                                             });
 
                                             filtered.sort((a, b) => {
@@ -1046,16 +1129,27 @@ public class HtmlReporter {
 
                                             tbody.innerHTML = filtered.map(d => {
                                                 const fileName = d.label.split('/').pop();
+                                                // Test Health badge: show primary smell name (shortened for table fit)
+                                                let testHealthBadge = '';
+                                                if (currentScope === 'test' || currentScope === 'all') {
+                                                    if (d.testIssues && d.testIssues.length > 0) {
+                                                        // Shorten: "Assertion Roulette (>20 assertions)" -> "Assertion Roulette"
+                                                        const primary = d.testIssues[0].split('(')[0].trim();
+                                                        const extra = d.testIssues.length > 1 ? ` +${d.testIssues.length - 1}` : '';
+                                                        testHealthBadge = `<td><span class="verdict-badge" style="background:#fef3c7; color:#92400e; max-width:120px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:inline-block;" title="${d.testIssues.join(', ')}">${primary}${extra}</span></td>`;
+                                                    } else {
+                                                        testHealthBadge = '<td><span class="verdict-badge verdict-OK">OK</span></td>';
+                                                    }
+                                                }
                                                 return `
-                                                <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>
-                                                    <td title="${d.label}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">${fileName}</td>
+                                                <tr onclick='showDetails(${JSON.stringify(d).replace(/'/g, "\\\\'")})'>\n                                                    <td title="${d.label}" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px;">${fileName}</td>
                                                     <td>${d.churn}</td>
                                                     <td>${d.recentChurn}</td>
                                                     <td>${d.riskScore.toFixed(1)}</td>
                                                     <td>${d.y.toFixed(0)}</td>
                                                     <td>${d.lcom4.toFixed(1)}</td>
                                                     <td><span class="verdict-badge verdict-${d.verdict.split(' ')[0]}">${d.verdict}</span></td>
-                                                    ${(currentScope === 'test' || currentScope === 'all') ? `<td>${(d.testIssues || []).map(i => `<span style="font-size:0.8rem; background:#fee2e2; color:#b91c1c; padding:2px 6px; border-radius:4px; margin-right:4px;">${i}</span>`).join('')}</td>` : ''}
+                                                    ${testHealthBadge}
                                                 </tr>
                                             `;}).join('');
                                         }
@@ -1068,6 +1162,8 @@ public class HtmlReporter {
 
                                         document.getElementById('classFilter').addEventListener('input', renderTable);
                                         document.getElementById('verdictFilter').addEventListener('change', renderTable);
+                                        document.getElementById('testHealthFilter').addEventListener('change', renderTable);
+
 
                                         // System Map (Circle Packing) rendering - System Map 2.0
                                         let treemapTooltip = null;
@@ -1711,7 +1807,33 @@ public class HtmlReporter {
                 }
 
                     function diagnose(d) {
+                        // Test file specific diagnoses (Philosophy: Tests are code too)
+                        if (d.isTest) {
+                            const hasIssues = d.testIssues && d.testIssues.length > 0;
+                            if (hasIssues) {
+                                const issueExplanations = d.testIssues.map(issue => {
+                                    if (issue.includes('Assertion Roulette')) return 'Too many assertions blur the \\"what broke\\" signal.';
+                                    if (issue.includes('Eager Test')) return 'Testing too much at once hides failures.';
+                                    if (issue.includes('Mystery Guest')) return 'External data makes tests flaky.';
+                                    return issue;
+                                }).join(' ');
+                                return {
+                                    title: '⚠️ Test Health Warning',
+                                    desc: 'This test has issues reducing its safety net value.',
+                                    why: issueExplanations,
+                                    fix: 'Address these smells to transform this tripwire into a reliable safety net.'
+                                };
+                            }
+                            return {
+                                title: '🛡️ Healthy Test',
+                                desc: 'This test follows good practices.',
+                                why: 'No test smells detected. Assertions are focused.',
+                                fix: 'Keep maintaining test quality.'
+                            };
+                        }
+
                         // Core verdicts from ForensicRuleEngine
+
                         if (d.verdict === 'SHOTGUN_SURGERY') return { title: "Shotgun Victim", desc: "Changes ripple everywhere", why: `Coupled to ${d.coupled} files`, fix: "Centralize logic into a single module" };
                         if (d.verdict === 'KNOWLEDGE_ISLAND') return { title: "🏝️ Knowledge Island", desc: "Single Active Maintainer", why: "Bus Factor = 1. High dependency on one author.", fix: "Pair programming, code walkthroughs, and having others touch this file." };
                         if (d.verdict === 'UNTESTED_HOTSPOT') return { title: "🔥 Untested Hotspot", desc: "High Risk + No Tests", why: "High Churn & Complexity with 0 tests.", fix: "Write characterization tests BEFORE making any changes." };
@@ -1739,10 +1861,51 @@ public class HtmlReporter {
 
                     function getPrescriptions(d) {
                         const steps = [];
+
+                        // Test file specific prescriptions (Philosophy: Abstract smells → concrete actions)
+                        if (d.isTest) {
+                            const issues = d.testIssues || [];
+
+                            if (issues.some(i => i.includes('Assertion Roulette'))) {
+                                steps.push({
+                                    icon: '🎯',
+                                    title: 'Split Assertions',
+                                    desc: 'One assertion per test. Name each test for what it verifies.'
+                                });
+                            }
+                            if (issues.some(i => i.includes('Eager Test'))) {
+                                steps.push({
+                                    icon: '✂️',
+                                    title: 'One Behavior Per Test',
+                                    desc: 'Extract each scenario into its own test method.'
+                                });
+                            }
+                            if (issues.some(i => i.includes('Mystery Guest'))) {
+                                steps.push({
+                                    icon: '📦',
+                                    title: 'Inline Test Data',
+                                    desc: 'Move external fixtures inline. Tests should be self-documenting.'
+                                });
+                            }
+                            if (d.y > 50) {
+                                steps.push({
+                                    icon: '🔧',
+                                    title: 'Simplify Test Setup',
+                                    desc: `Test has CC=${d.y.toFixed(0)}. Extract setup to helper methods or @BeforeEach.`
+                                });
+                            }
+
+                            if (steps.length === 0) {
+                                steps.push({ icon: '✅', title: 'Maintain Quality', desc: 'This test is healthy. Continue the good practices.' });
+                            }
+                            return steps;
+                        }
+
                         const roi = d.churn * d.y;
                         const isHighROI = roi > 1000;
 
                                     const isBenign = d.verdict === 'OK' || d.verdict === 'ORCHESTRATOR' || d.verdict === 'DATA_CLASS' || d.verdict === 'CONFIGURATION';
+
 
                                     if (isHighROI && !isBenign) {
                                         steps.push({
@@ -1941,9 +2104,9 @@ public class HtmlReporter {
                             `;
                         }
 
-                        // Testability section
+                        // Testability section - only for production code (not relevant for tests themselves)
                         let testabilitySection = '';
-                        if (d.hasTestFile !== undefined) {
+                        if (!d.isTest && d.hasTestFile !== undefined) {
                             const hasTest = d.hasTestFile;
                             const score = d.testabilityScore || 0;
                             const isUntestedHotspot = d.isUntestedHotspot || d.verdict === 'UNTESTED_HOTSPOT';
@@ -2088,10 +2251,10 @@ public class HtmlReporter {
 
                             ${testIssuesSection}
                             ${testProfileSection}
-                            ${socialSection}
-                            ${testabilitySection}
-                            ${islandWarning}
-                            ${refactoringSection}
+                            ${d.isTest ? '' : socialSection}
+                            ${d.isTest ? '' : testabilitySection}
+                            ${d.isTest ? '' : islandWarning}
+                            ${d.isTest ? '' : refactoringSection}
 
                             <!-- Action Plan Section -->
                             <div class="action-plan" style="background: #e3f2fd; padding: 15px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #2196f3;">
@@ -2113,7 +2276,7 @@ public class HtmlReporter {
                                 <h3>${diagnosis.title}</h3>
                                 <p>${diagnosis.desc}</p>
                                 <p><strong>Why?</strong> ${diagnosis.why}</p>
-                                ${d.brainMethods && d.brainMethods.length > 0 ? `
+                                ${!d.isTest && d.brainMethods && d.brainMethods.length > 0 ? `
                                     <div style="background: #ffebee; border-left: 4px solid #c0392b; padding: 10px; margin: 10px 0; border-radius: 4px;">
                                         <h4 style="margin: 0 0 5px 0; color: #c0392b;">🧠 Brain Methods Detected</h4>
                                         <ul style="margin: 5px 0 5px 20px; padding: 0;">
@@ -2124,6 +2287,14 @@ public class HtmlReporter {
                                 ` : ''}
                                 <div class="tips"><h4>💡 Recommendation</h4>${diagnosis.fix}</div>
                             </div>
+                            ${d.isTest ? `
+                            <div class="stat-grid">
+                                <div class="stat-item" title="Cyclomatic Complexity"><span class="stat-val">${d.y.toFixed(0)}</span><span class="stat-label">Complexity</span></div>
+                                <div class="stat-item" title="Total commits"><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
+                                <div class="stat-item" title="Recent commits (90 days)"><span class="stat-val">${d.recentChurn}</span><span class="stat-label">Recent Churn</span></div>
+                                <div class="stat-item" title="Lines of Code"><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
+                            </div>
+                            ` : `
                             <div class="stat-grid">
                                 <div class="stat-item" title="Risk Score = Complexity × Churn.&#010;High risk means high probability of defects."><span class="stat-val">${d.riskScore.toFixed(1)}</span><span class="stat-label">Risk Score</span></div>
                                 <div class="stat-item" title="Total number of commits modifying this file.&#010;High churn indicates frequent changes."><span class="stat-val">${d.churn}</span><span class="stat-label">Churn</span></div>
@@ -2134,6 +2305,7 @@ public class HtmlReporter {
                                 <div class="stat-item" title="Ratio of outgoing to total coupling (0=Stable Core, 1=Flexible Edge)."><span class="stat-val">${d.instability.toFixed(2)}</span><span class="stat-label">Instability</span></div>
                                 <div class="stat-item" title="Lines of Code."><span class="stat-val">${d.loc.toFixed(0)}</span><span class="stat-label">LOC</span></div>
                             </div>
+                            `}
 
                             <p style="font-size: 0.8rem; color: #999;">Full Path: ${d.label}</p>
                         `;

@@ -152,6 +152,19 @@ cd code-panopticon
 | **Hardcoded Waits** | Detects `Thread.sleep`, `cy.wait`, `setTimeout` (flakiness risk) |
 | **Selector Quality** | Detects brittle XPath/CSS usage in E2E tests |
 
+#### Test Smells Detected
+
+The UI now includes dedicated test-specific diagnostics:
+
+| Smell | What It Means | Action |
+|-------|---------------|--------|
+| **Assertion Roulette** | Too many assertions (>20) in one test | Split into focused tests |
+| **Eager Test** | Test is doing too much | One behavior per test |
+| **Mystery Guest** | Relies on external data/resources | Inline test data |
+| **Hardcoded Waits** | Uses `sleep()`, `cy.wait()`, etc. | Use explicit waits |
+| **Brittle Selectors** | Uses fragile XPath/CSS | Use data-testid |
+
+
 ### CLI Options
 
 | Option | Description |

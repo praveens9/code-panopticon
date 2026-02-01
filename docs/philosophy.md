@@ -108,6 +108,16 @@ We analyze test health (assertions, waits, selectors) just as rigorously as prod
 
 > **Principle:** Unhealthy tests are not a safety net; they are a tripwire. Maintain them or delete them.
 
+#### Test Smells Detected
+
+| Smell | What It Means | Action |
+|-------|---------------|--------|
+| **Assertion Roulette** | Too many assertions (>20) in one test | Split into focused tests; name each for what it verifies |
+| **Eager Test** | Test is doing too much | Each test should verify one specific behavior |
+| **Mystery Guest** | Relies on external data/resources | Make test data explicit and self-contained |
+| **Hardcoded Waits** | Uses `sleep()`, `cy.wait()`, etc. | Replace with explicit waits or polling |
+| **Brittle Selectors** | Uses fragile XPath/CSS | Use data-testid attributes |
+
 ---
 
 ## The Metrics
