@@ -27,6 +27,10 @@ Add this to your `claude_desktop_config.json` (usually in `~/Library/Application
 ## Tools
 
 - `analyze_codebase`: Runs analysis and returns top risks + path to HTML report.
+  - `path`: Repository path or URL (required)
+  - `hotspotsOnly`: Analyze only active files (boolean)
+  - `treatAllAsTest`: Treat all files as test code (boolean)
+  - `framework`: Manual framework override (string)
 - `get_risk_summary`: Get a quick summary of the "Burning Platforms".
 - `get_file_insights`: Get detailed metrics for a specific file.
 - `get_test_health_summary`: Get overall testing stats (asserts, frameworks, hotspots).

@@ -147,6 +147,7 @@ All options are passed via `--args="..."` to Gradle. The `--console=plain` flag 
 | `--classes <path>` | Path to compiled Java `.class` files (for bytecode analysis) | None |
 | `--output <dir>` | Output directory for reports | `reports/` |
 | `--name <name>` | Custom project name for report title | Auto-detect |
+| `--framework <name>` | Manually specify test framework (e.g. `playwright`, `testng`) | Auto-detect |
 | `--test-only` | Treat **all files** as test code (for automation repos) | Off |
 | `--hotspots-only` | Only analyze files with Git activity (faster for large repos) | Off |
 | `--min-churn <n>` | Minimum commits to include a file (use with `--hotspots-only`) | 1 |
@@ -254,6 +255,15 @@ If analyzing a **test-only** repository (e.g., Playwright or Cypress framework),
 ```
 
 This applies test-specific metrics (like Assertion count, Test Smells) to all files.
+
+#### 9. Override Test Framework
+
+If the auto-detection gets it wrong (or for custom setups), force a specific framework:
+
+```bash
+./gradlew run --args="--repo . --framework playwright" --console=plain
+```
+
 
 ---
 

@@ -905,7 +905,7 @@ public class HtmlReporter {
                                                 }
 
                                                 // Run init - AFTER helpers are defined
-                                                try { initDashboard(); } catch(e) { console.error("Dashboard init error", e); }
+                                                try { refreshDashboard(); } catch(e) { console.error("Dashboard init error", e); }
 
                                                 function updateRiskChart() {
                                                     const ctx = document.getElementById('riskChart').getContext('2d');
