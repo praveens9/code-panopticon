@@ -12,7 +12,7 @@ public class HtmlReporter {
 
     private final JsonDataConverter jsonConverter = new JsonDataConverter();
 
-    public void generate(List<AnalysisData> data, AnalysisStats stats, Path outputPath) {
+    public void generate(List<AnalysisData> data, AnalysisStats stats, Path outputPath, String projectName) {
         String json = jsonConverter.convertToDataJson(data);
         String statsJson = String.format("{\"analyzed\": %d, \"skipped\": %d, \"total\": %d}", stats.analyzed,
                 stats.skipped, stats.total);
@@ -24,7 +24,7 @@ public class HtmlReporter {
                 .replace("{{DATA_PLACEHOLDER}}", json)
                 .replace("{{STATS_PLACEHOLDER}}", statsJson)
                 .replace("{{TREEMAP_DATA}}", treemapJson)
-
+                .replace("{{PROJECT_NAME}}", projectName != null ? projectName : "Code Forensics")
                 .replace("{{NETWORK_DATA}}", networkJson);
 
         try {
@@ -172,17 +172,17 @@ public class HtmlReporter {
                     .link { stroke: #999; stroke-opacity: 0.6; stroke-width: 1px; }
 
 
-                    /* DataTable - Scrollable with Sticky Header */
+                    /* DataTable - Scrollable with Sticky Header and Filters */
                     #table-tab { max-height: 70vh; overflow-y: auto; }
-                    table { width: 100%; border-collapse: collapse; margin-top: 20px; table-layout: fixed; }
+                    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
                     th { resize: horizontal; overflow: hidden; min-width: 80px; }
                     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
-                    th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 0; z-index: 1; }
+                    th { background: #34495e; color: white; cursor: pointer; user-select: none; position: sticky; top: 52px; z-index: 2; }
                     th:hover { background: #2c3e50; }
                     tr:hover { background: #f5f5f5; cursor: pointer; }
                     td:first-child { max-width: 350px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
                     td:first-child:hover { overflow: visible; white-space: normal; word-break: break-all; background: #fff; position: relative; z-index: 2; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }
-                    .filter-row { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; }
+                    .filter-row { display: flex; gap: 10px; margin-bottom: 0; flex-wrap: wrap; position: sticky; top: 0; background: #fff; z-index: 3; padding: 10px 0; border-bottom: 1px solid #eee; }
                     .filter-row input, .filter-row select { padding: 8px; border: 1px solid #ddd; border-radius: 4px; }
 
                     /* Side Panel */
@@ -275,7 +275,7 @@ public class HtmlReporter {
                                             <div id="wrapper" style="display: flex; width: 100%; height: 100%;">
                                                 <div class="main-content">
                                                     <div class="container">
-                                                        <h1>Code Forensics: Risk Analysis</h1>
+                                                        <h1>{{PROJECT_NAME}}: Risk Analysis</h1>
 
                                                         <div class="tabs">
                                                             <button id="btn-dashboard" class="tab active" onclick="switchTab('dashboard')">Dashboard</button>

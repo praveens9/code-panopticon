@@ -56,8 +56,10 @@ public class PolyglotApp {
                   --repo <path>      Path to the Git repository to analyze (required)
                   --classes <path>   Path to compiled Java classes (optional, for bytecode analysis)
                   --output <dir>     Output directory for reports (default: current directory)
+                  --name <name>      Custom project name for report title (default: auto-detect)
                   --hotspots-only    Only analyze files with Git churn (for large repos)
                   --min-churn <n>    Minimum churn to include a file (default: 1)
+                  --keep-clone       Keep cloned repo after analysis (for remote URLs)
                 """);
     }
 
@@ -66,6 +68,7 @@ public class PolyglotApp {
             Path repoPath, // Resolved local path
             Path classesPath,
             Path outputDir,
+            String projectName, // Custom project name (optional)
             boolean hotspotsOnly,
             int minChurn,
             boolean keepClone) {
@@ -75,6 +78,7 @@ public class PolyglotApp {
         String repoInput = null;
         Path classesPath = null;
         Path outputDir = Path.of("reports");
+        String projectName = null;
         boolean hotspotsOnly = false;
         int minChurn = 1;
         boolean keepClone = false;
@@ -93,6 +97,10 @@ public class PolyglotApp {
                     if (i + 1 < args.length)
                         outputDir = Path.of(args[++i]);
                 }
+                case "--name" -> {
+                    if (i + 1 < args.length)
+                        projectName = args[++i];
+                }
                 case "--hotspots-only" -> hotspotsOnly = true;
                 case "--min-churn" -> {
                     if (i + 1 < args.length)
@@ -109,7 +117,7 @@ public class PolyglotApp {
         // Resolve repo path - will be set after potential clone
         Path repoPath = isRemoteUrl(repoInput) ? null : Path.of(repoInput);
 
-        return new CliArgs(repoInput, repoPath, classesPath, outputDir, hotspotsOnly, minChurn, keepClone);
+        return new CliArgs(repoInput, repoPath, classesPath, outputDir, projectName, hotspotsOnly, minChurn, keepClone);
     }
 
     private static boolean isRemoteUrl(String input) {
@@ -355,8 +363,13 @@ public class PolyglotApp {
         Path htmlPath = args.outputDir().resolve("panopticon-report.html");
         Path csvPath = args.outputDir().resolve("panopticon-report.csv");
 
+        // Use CLI-provided name or auto-detect from path
+        String projectName = args.projectName() != null
+                ? args.projectName()
+                : extractProjectName(repoPath, args.repoInput());
+
         HtmlReporter.AnalysisStats stats = new HtmlReporter.AnalysisStats(analyzed, skipped, totalFiles);
-        new HtmlReporter().generate(reportData, stats, htmlPath);
+        new HtmlReporter().generate(reportData, stats, htmlPath, projectName);
         new CsvReporter().generate(reportData, csvPath);
 
         // Generate JSON for AI/Tools
@@ -408,6 +421,37 @@ public class PolyglotApp {
         if (s.length() <= len)
             return s;
         return "..." + s.substring(s.length() - (len - 3));
+    }
+
+    private String extractProjectName(Path repoPath, String repoInput) {
+        // Try to get name from URL (e.g., https://github.com/user/project -> project)
+        if (isRemoteUrl(repoInput)) {
+            String url = repoInput;
+            // Remove .git suffix
+            if (url.endsWith(".git"))
+                url = url.substring(0, url.length() - 4);
+            // Remove trailing slash
+            if (url.endsWith("/"))
+                url = url.substring(0, url.length() - 1);
+            // Get last segment
+            int lastSlash = url.lastIndexOf('/');
+            if (lastSlash >= 0) {
+                return url.substring(lastSlash + 1);
+            }
+        }
+        // Fall back to directory name (resolve to handle "." case)
+        if (repoPath != null) {
+            try {
+                Path absPath = repoPath.toAbsolutePath().normalize();
+                Path fileName = absPath.getFileName();
+                if (fileName != null) {
+                    return fileName.toString();
+                }
+            } catch (Exception e) {
+                // Fall through to default
+            }
+        }
+        return "Code Forensics";
     }
 
     private void printSummary(List<AnalysisData> data) {

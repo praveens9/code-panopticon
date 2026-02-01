@@ -146,6 +146,7 @@ All options are passed via `--args="..."` to Gradle. The `--console=plain` flag 
 |--------|-------------|---------|
 | `--classes <path>` | Path to compiled Java `.class` files (for bytecode analysis) | None |
 | `--output <dir>` | Output directory for reports | `reports/` |
+| `--name <name>` | Custom project name for report title | Auto-detect |
 | `--hotspots-only` | Only analyze files with Git activity (faster for large repos) | Off |
 | `--min-churn <n>` | Minimum commits to include a file (use with `--hotspots-only`) | 1 |
 | `--keep-clone` | Keep cloned repo after analysis (for remote URLs) | Off |
@@ -228,6 +229,18 @@ Save reports to a specific folder:
 ```bash
 ./gradlew run --args="--repo . --output ./my-reports" --console=plain
 ```
+
+---
+
+#### 7. Custom Project Name
+
+Override the auto-detected project name in the report header:
+
+```bash
+./gradlew run --args="--repo . --name 'My Awesome Project'" --console=plain
+```
+
+This displays **"My Awesome Project: Risk Analysis"** as the report title.
 
 ---
 
