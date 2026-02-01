@@ -10,19 +10,11 @@ Supports: **Java** (bytecode), **Python** (AST), **JavaScript/TypeScript** (rege
 
 ---
 
-## 📸 Gallery
+## 🎥 Walkthrough
 
-| **Quadrant View** (Churn vs Complexity) | **System Map** (Codebase Topology) |
-|:---------------------------------------:|:----------------------------------:|
-| ![Quadrant](docs/images/quadrant_view.png) | ![System Map](docs/images/system_map.png) |
+![Code Panopticon Demo](docs/images/demo.webp)
 
-| **Coupling Graph** (Dependencies) | **Data Table** (Deep Metrics) |
-|:---------------------------------:|:-----------------------------:|
-| ![Coupling](docs/images/coupling_graph.png) | ![Data Table](docs/images/data_table.png) |
-
-| **Side Panel** (Forensics & Action Plan) |
-|:----------------------------------------:|
-| ![Side Panel](docs/images/side_panel.png) |
+*Detailed walkthrough showing: Dashboard, Quadrant View, System Map, Coupling Graph, and Deep Dive Analysis.*
 
 ---
 
