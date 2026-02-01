@@ -57,9 +57,20 @@ push_to_personal.sh
 # Gradle
 .gradle/
 
+# Internal Docs
+docs/plan.md
+docs/research.md
+
 # Generated Reports and Graphs
 panopticon-report.html
 app/graphs/
 # Generated reports
 reports/
 app/bin/
+panopticon-reports/
+report_output/
+external_report*/
+
+# MCP Wrapper
+mcp-wrapper/node_modules/
+mcp-wrapper/dist/

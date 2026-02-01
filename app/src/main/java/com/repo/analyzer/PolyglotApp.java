@@ -10,10 +10,12 @@ import com.repo.analyzer.report.CsvReporter;
 import com.repo.analyzer.report.HtmlReporter;
 import com.repo.analyzer.report.JsonDataConverter;
 import com.repo.analyzer.rules.ForensicRuleEngine;
+import com.repo.analyzer.test.TestQualityAnalyzer;
 import com.repo.analyzer.testability.TestabilityAnalyzer;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -54,8 +56,12 @@ public class PolyglotApp {
                   --repo <path>      Path to the Git repository to analyze (required)
                   --classes <path>   Path to compiled Java classes (optional, for bytecode analysis)
                   --output <dir>     Output directory for reports (default: current directory)
+                  --name <name>      Custom project name for report title (default: auto-detect)
+                  --test-only        Treat all files as test code (for test automation repos)
+                  --framework <name> Manual test framework override (e.g. playwright, cypress)
                   --hotspots-only    Only analyze files with Git churn (for large repos)
                   --min-churn <n>    Minimum churn to include a file (default: 1)
+                  --keep-clone       Keep cloned repo after analysis (for remote URLs)
                 """);
     }
 
@@ -64,7 +70,10 @@ public class PolyglotApp {
             Path repoPath, // Resolved local path
             Path classesPath,
             Path outputDir,
+            String projectName, // Custom project name (optional)
             boolean hotspotsOnly,
+            boolean treatAllAsTest,
+            String framework, // Manual framework override (optional)
             int minChurn,
             boolean keepClone) {
     }
@@ -73,7 +82,10 @@ public class PolyglotApp {
         String repoInput = null;
         Path classesPath = null;
         Path outputDir = Path.of("reports");
+        String projectName = null;
         boolean hotspotsOnly = false;
+        boolean treatAllAsTest = false;
+        String framework = null;
         int minChurn = 1;
         boolean keepClone = false;
 
@@ -91,6 +103,15 @@ public class PolyglotApp {
                     if (i + 1 < args.length)
                         outputDir = Path.of(args[++i]);
                 }
+                case "--name" -> {
+                    if (i + 1 < args.length)
+                        projectName = args[++i];
+                }
+                case "--test-only" -> treatAllAsTest = true;
+                case "--framework" -> {
+                    if (i + 1 < args.length)
+                        framework = args[++i];
+                }
                 case "--hotspots-only" -> hotspotsOnly = true;
                 case "--min-churn" -> {
                     if (i + 1 < args.length)
@@ -107,7 +128,9 @@ public class PolyglotApp {
         // Resolve repo path - will be set after potential clone
         Path repoPath = isRemoteUrl(repoInput) ? null : Path.of(repoInput);
 
-        return new CliArgs(repoInput, repoPath, classesPath, outputDir, hotspotsOnly, minChurn, keepClone);
+        return new CliArgs(repoInput, repoPath, classesPath, outputDir, projectName, hotspotsOnly, treatAllAsTest,
+                framework,
+                minChurn, keepClone);
     }
 
     private static boolean isRemoteUrl(String input) {
@@ -175,8 +198,18 @@ public class PolyglotApp {
     private void runAnalysis(Path repoPath, CliArgs args) throws Exception {
         // Build configuration from YAML (or defaults)
         AnalyzerConfig config = AnalyzerConfig.load(repoPath);
+
+        // Apply CLI overrides
         if (args.classesPath() != null) {
             config = config.withCompiledClassesPath(args.classesPath());
+        }
+        if (args.treatAllAsTest()) {
+            config.setTreatAllAsTest(true);
+            System.out.println("Mode: Test-Only (All files treated as tests)");
+        }
+        if (args.framework() != null) {
+            config.setManualFramework(args.framework());
+            System.out.println("Framework Override: " + args.framework());
         }
 
         // Initialize analyzers
@@ -209,6 +242,7 @@ public class PolyglotApp {
         System.out.println("\n>>> PHASE 2: ANALYZING STRUCTURE <<<");
         ForensicRuleEngine ruleEngine = new ForensicRuleEngine();
         TestabilityAnalyzer testabilityAnalyzer = new TestabilityAnalyzer(repoPath);
+        TestQualityAnalyzer testQualityAnalyzer = new TestQualityAnalyzer(config.getManualFramework());
         List<AnalysisData> reportData = new ArrayList<>();
 
         // Print header
@@ -224,16 +258,12 @@ public class PolyglotApp {
 
         for (String relativePath : filesToAnalyze) {
             processed++;
-            // Skip test files
-            if (relativePath.contains("/test/") || relativePath.contains("Test.")) {
-                skipped++;
-                continue;
-            }
-
             Path filePath = repoPath.resolve(relativePath);
             if (!Files.exists(filePath)) {
                 continue;
             }
+
+            boolean isTest = config.isTestFile(Paths.get(relativePath));
 
             // Analyze with appropriate analyzer
             Optional<FileMetrics> metricsOpt = registry.analyze(filePath, config);
@@ -274,6 +304,15 @@ public class PolyglotApp {
             boolean isUntestedHotspot = testabilityAnalyzer.isUntestedHotspot(
                     hasTestFile, riskScore, churn);
 
+            // Test Quality Analysis
+            List<String> testIssues = new ArrayList<>();
+            java.util.Map<String, String> testProfile = new java.util.HashMap<>();
+            if (isTest) {
+                TestQualityAnalyzer.Result result = testQualityAnalyzer.analyze(filePath);
+                testIssues = result.issues();
+                testProfile = result.stats();
+            }
+
             reportData.add(new AnalysisData(
                     className,
                     churn,
@@ -306,7 +345,11 @@ public class PolyglotApp {
                     hasTestFile,
                     testFilePath,
                     testabilityScore,
-                    isUntestedHotspot));
+
+                    isUntestedHotspot,
+                    isTest,
+                    testIssues,
+                    testProfile));
 
             // Print row
             System.out.println("| %-50s | %-10s | %-5d | %-5d | %-6.0f | %-6.0f | %-20s |".formatted(
@@ -319,6 +362,10 @@ public class PolyglotApp {
                     verdict));
 
             analyzed++;
+            // if (isTest) skipped++; // Removed: Tests are now analyzed, not skipped
+            // User view: Skipped usually means ignored. Let's rename in output or add new
+            // metric.
+            // For now, let's just count Analyzed = total. But maybe we want separate stats.
 
             // Progress update
             if (processed % 50 == 0 || processed == totalFiles) {
@@ -328,7 +375,7 @@ public class PolyglotApp {
         }
         System.out.println(); // Newline after progress
 
-        System.out.printf("%nAnalyzed: %d files | Skipped: %d test files%n", analyzed, skipped);
+        System.out.printf("%nAnalyzed: %d files | Skipped: %d%n", analyzed, skipped);
 
         // Phase 3: Generate Reports
         System.out.println("\n>>> PHASE 3: GENERATING REPORTS <<<");
@@ -339,8 +386,13 @@ public class PolyglotApp {
         Path htmlPath = args.outputDir().resolve("panopticon-report.html");
         Path csvPath = args.outputDir().resolve("panopticon-report.csv");
 
+        // Use CLI-provided name or auto-detect from path
+        String projectName = args.projectName() != null
+                ? args.projectName()
+                : extractProjectName(repoPath, args.repoInput());
+
         HtmlReporter.AnalysisStats stats = new HtmlReporter.AnalysisStats(analyzed, skipped, totalFiles);
-        new HtmlReporter().generate(reportData, stats, htmlPath);
+        new HtmlReporter().generate(reportData, stats, htmlPath, projectName);
         new CsvReporter().generate(reportData, csvPath);
 
         // Generate JSON for AI/Tools
@@ -392,6 +444,37 @@ public class PolyglotApp {
         if (s.length() <= len)
             return s;
         return "..." + s.substring(s.length() - (len - 3));
+    }
+
+    private String extractProjectName(Path repoPath, String repoInput) {
+        // Try to get name from URL (e.g., https://github.com/user/project -> project)
+        if (isRemoteUrl(repoInput)) {
+            String url = repoInput;
+            // Remove .git suffix
+            if (url.endsWith(".git"))
+                url = url.substring(0, url.length() - 4);
+            // Remove trailing slash
+            if (url.endsWith("/"))
+                url = url.substring(0, url.length() - 1);
+            // Get last segment
+            int lastSlash = url.lastIndexOf('/');
+            if (lastSlash >= 0) {
+                return url.substring(lastSlash + 1);
+            }
+        }
+        // Fall back to directory name (resolve to handle "." case)
+        if (repoPath != null) {
+            try {
+                Path absPath = repoPath.toAbsolutePath().normalize();
+                Path fileName = absPath.getFileName();
+                if (fileName != null) {
+                    return fileName.toString();
+                }
+            } catch (Exception e) {
+                // Fall through to default
+            }
+        }
+        return "Code Forensics";
     }
 
     private void printSummary(List<AnalysisData> data) {

@@ -18,7 +18,6 @@ public class JavaBytecodeAnalyzer implements LanguageAnalyzer {
     private static final Set<String> EXTENSIONS = Set.of(".java");
 
     private BytecodeAnalyzer bytecodeAnalyzer;
-    private Path compiledClassesPath;
 
     public JavaBytecodeAnalyzer() {
         // Will be initialized when config is provided
@@ -28,7 +27,6 @@ public class JavaBytecodeAnalyzer implements LanguageAnalyzer {
      * Initialize with path to compiled classes.
      */
     public void initialize(Path compiledClassesPath) {
-        this.compiledClassesPath = compiledClassesPath;
         if (Files.exists(compiledClassesPath)) {
             this.bytecodeAnalyzer = new BytecodeAnalyzer(compiledClassesPath);
         }

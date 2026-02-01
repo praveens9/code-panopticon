@@ -96,6 +96,30 @@ Code Panopticon provides **refactoring pathways**:
 
 ---
 
+### 5. Tests Are Code Too
+
+Most analysis tools ignore test files. Code Panopticon treats them as first-class citizens.
+
+- **Flaky tests kill confidence.** A test that fails randomly is worse than no test.
+- **Slow tests allow decay.** If tests take 30 minutes, developers stop running them.
+- **Complex tests hide bugs.** If you need a debugger to understand a test, the test is broken.
+
+We analyze test health (assertions, waits, selectors) just as rigorously as production code.
+
+> **Principle:** Unhealthy tests are not a safety net; they are a tripwire. Maintain them or delete them.
+
+#### Test Smells Detected
+
+| Smell | What It Means | Action |
+|-------|---------------|--------|
+| **Assertion Roulette** | Too many assertions (>20) in one test | Split into focused tests; name each for what it verifies |
+| **Eager Test** | Test is doing too much | Each test should verify one specific behavior |
+| **Mystery Guest** | Relies on external data/resources | Make test data explicit and self-contained |
+| **Hardcoded Waits** | Uses `sleep()`, `cy.wait()`, etc. | Replace with explicit waits or polling |
+| **Brittle Selectors** | Uses fragile XPath/CSS | Use data-testid attributes |
+
+---
+
 ## The Metrics
 
 Code Panopticon combines structural analysis (code) with evolutionary analysis (git history) and social analysis (team dynamics) to generate its insights.

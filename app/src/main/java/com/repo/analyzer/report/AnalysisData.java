@@ -49,7 +49,16 @@ public record AnalysisData(
                 boolean hasTestFile,
                 String testFilePath,
                 int testabilityScore,
-                boolean isUntestedHotspot) {
+                boolean isUntestedHotspot,
+
+                // Scope
+                boolean isTest,
+
+                // Test Health
+                java.util.List<String> testIssues,
+
+                // Test Profile
+                java.util.Map<String, String> testProfile) {
 
         /**
          * Create AnalysisData with empty social forensics and testability (for backward
@@ -70,7 +79,7 @@ public record AnalysisData(
                                 afferentCoupling, instability, loc, riskScore, verdict, isDataClass,
                                 brainMethods, lcom4Blocks, coupledClassNames,
                                 0, "unknown", 0, 0, false, java.util.List.of(),
-                                false, "", 0, false);
+                                false, "", 0, false, false, java.util.List.of(), java.util.Map.of());
         }
 
         /**
@@ -95,6 +104,6 @@ public record AnalysisData(
                                 brainMethods, lcom4Blocks, coupledClassNames,
                                 authorCount, primaryAuthor, primaryAuthorPercentage, busFactor, isKnowledgeIsland,
                                 topContributors,
-                                false, "", 0, false);
+                                false, "", 0, false, false, java.util.List.of(), java.util.Map.of());
         }
 }

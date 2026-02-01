@@ -30,8 +30,19 @@ public class AnalyzerConfig {
 
     // Exclusion patterns
     private Set<String> exclusions = Set.of(
-            "**/test/**", "**/tests/**", "**/*Test.java", "**/*_test.py",
-            "**/node_modules/**", "**/vendor/**", "**/__pycache__/**");
+            "**/node_modules/**", "**/vendor/**", "**/__pycache__/**",
+            "**/.git/**", "**/.gradle/**", "**/build/**");
+
+    // Test patterns
+    private Set<String> testPatterns = Set.of(
+            "**/test/**", "**/tests/**", "**/*Test.java", "**/*Tests.java",
+            "**/*_test.py", "**/*.test.ts", "**/*.spec.ts",
+            "**/*.test.js", "**/*.spec.js", "**/*.e2e.ts", "**/*.e2e.js",
+            "**/specs/**", "**/__tests__/**", "playwright.config.ts");
+
+    // Flags
+    private boolean treatAllAsTest = false;
+    private String manualFramework = null;
 
     // Treemap settings
     private int treemapMaxFiles = 100;
@@ -252,12 +263,69 @@ public class AnalyzerConfig {
         return false;
     }
 
+    public boolean isTestFile(Path path) {
+        if (treatAllAsTest) {
+            return true;
+        }
+        String pathStr = path.toString();
+        for (String pattern : testPatterns) {
+            if (matchesGlob(pathStr, pattern)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void setTreatAllAsTest(boolean treatAllAsTest) {
+        this.treatAllAsTest = treatAllAsTest;
+    }
+
+    public void setManualFramework(String framework) {
+        this.manualFramework = framework;
+    }
+
+    public String getManualFramework() {
+        return manualFramework;
+    }
+
+    public Set<String> getTestPatterns() {
+        return testPatterns;
+    }
+
     private boolean matchesGlob(String path, String glob) {
         String regex = glob
                 .replace("**", "<<<DOUBLESTAR>>>")
                 .replace("*", "[^/]*")
                 .replace("<<<DOUBLESTAR>>>", ".*");
-        return path.matches(".*" + regex + ".*");
+
+        // Handle leading **/
+        if (regex.startsWith(".*")) {
+            // If looks like .*/foo, make the slash optional or handle start anchor
+            // But simpler: just use implicit usually.
+            // Problem: "**/foo" -> ".*?/foo" or "(?:.*/)?foo"
+        }
+
+        // Better approach: Use standard glob-to-regex conversion logic or use
+        // FileSystemMatcher if possible.
+        // But since we are string based:
+        // "**/test/**" -> "((.*/)|^)test(/.*)?"
+
+        // Let's restart the regex build for robustness:
+        StringBuilder sb = new StringBuilder();
+        if (glob.startsWith("**/")) {
+            sb.append("(?:.*/|^)");
+            glob = glob.substring(3);
+        }
+
+        // Replace remainder - Use placeholders to prevent collision
+        String doc = glob
+                .replace("**", "___DOUBLESTAR___")
+                .replace("*", "[^/]*")
+                .replace("?", ".")
+                .replace("___DOUBLESTAR___", ".*");
+
+        sb.append(doc);
+        return path.matches(sb.toString());
     }
 
     public AnalyzerConfig withCompiledClassesPath(Path path) {

@@ -60,7 +60,7 @@ public class JsonDataConverter {
                         "\"loc\": %.0f, \"riskScore\": %.2f, \"daysSinceLastCommit\": %d, \"authorCount\": %d, " +
                         "\"primaryAuthor\": \"%s\", \"primaryAuthorPercentage\": %.1f, \"busFactor\": %d, \"isKnowledgeIsland\": %b, "
                         +
-                        "\"hasTestFile\": %b, \"testFilePath\": \"%s\", \"testabilityScore\": %d, \"isUntestedHotspot\": %b }",
+                        "\"hasTestFile\": %b, \"testFilePath\": \"%s\", \"testabilityScore\": %d, \"isUntestedHotspot\": %b, \"isTest\": %b, \"coupledClassNames\": [%s], \"testIssues\": [%s], \"testProfile\": {%s} }",
                 d.churn(), d.totalCC(), Math.sqrt(d.methodCount()) * 3, escapeJson(d.className()),
                 d.avgFields(), d.maxCC(), d.coupledPeers(), d.verdict(), d.isDataClass(),
                 formatBrainMethods(d.brainMethods()),
@@ -70,7 +70,12 @@ public class JsonDataConverter {
                 d.daysSinceLastCommit(), d.authorCount(),
                 escapeJson(d.primaryAuthor()),
                 d.primaryAuthorPercentage(), d.busFactor(), d.isKnowledgeIsland(),
-                d.hasTestFile(), escapeJson(d.testFilePath()), d.testabilityScore(), d.isUntestedHotspot());
+                d.hasTestFile(), escapeJson(d.testFilePath()), d.testabilityScore(), d.isUntestedHotspot(), d.isTest(),
+                d.coupledClassNames().stream().map(s -> "\"" + escapeJson(s) + "\"").collect(Collectors.joining(", ")),
+                d.testIssues().stream().map(s -> "\"" + escapeJson(s) + "\"").collect(Collectors.joining(", ")),
+                d.testProfile().entrySet().stream()
+                        .map(e -> "\"" + escapeJson(e.getKey()) + "\": \"" + escapeJson(e.getValue()) + "\"")
+                        .collect(Collectors.joining(", ")));
     }
 
     private String formatBrainMethods(List<String> methods) {
