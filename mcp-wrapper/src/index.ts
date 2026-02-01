@@ -229,29 +229,51 @@ class PanopticonServer {
 
       // Read JSON content
       const jsonContent = await fs.readFile(jsonReportPath, "utf-8");
+      const data = JSON.parse(jsonContent);
 
-      const dataSize = jsonContent.length;
-      let returnContent = jsonContent;
-      let note = "";
+      // Always return a compact summary to avoid exceeding MCP client token limits
+      // Full JSON can be retrieved via the get_file_insights and other specific tools
+      const totalFiles = data.files?.length || 0;
+      
+      // Get verdict distribution
+      const verdictCounts: Record<string, number> = {};
+      (data.files || []).forEach((f: any) => {
+        const v = f.verdict || 'UNKNOWN';
+        verdictCounts[v] = (verdictCounts[v] || 0) + 1;
+      });
 
-      if (dataSize > 50 * 1024 * 1024) { // 50MB limit
-        note = "NOTE: Full JSON report is too large (>50MB). Returning summary only. Use get_file_insights for details.";
-        const data = JSON.parse(jsonContent);
-        if (data.files && data.files.length > 100) {
-          data.files = data.files.sort((a: any, b: any) => b.riskScore - a.riskScore).slice(0, 100);
-          returnContent = JSON.stringify(data);
-        }
-      }
+      // Get top 20 risky files with essential data only
+      const topRiskyFiles = (data.files || [])
+        .sort((a: any, b: any) => b.riskScore - a.riskScore)
+        .slice(0, 20)
+        .map((f: any) => ({
+          file: f.label,
+          riskScore: Math.round(f.riskScore * 10) / 10,
+          verdict: f.verdict,
+          complexity: f.y,
+          churn: f.x,
+          isTest: f.isTest || false
+        }));
+
+      // Build compact summary object
+      const summary = {
+        reportPath: htmlReportPath,
+        jsonReportPath: jsonReportPath,
+        totalFilesAnalyzed: totalFiles,
+        verdictDistribution: verdictCounts,
+        topRiskyFiles: topRiskyFiles,
+        note: "Use get_file_insights(filePath) for detailed metrics on specific files. Use get_risk_summary(limit) for more risky files. Use get_test_health_summary() for testing insights."
+      };
 
       return {
         content: [
           {
             type: "text",
-            text: `Analysis Complete.\n\nHTML Report: ${htmlReportPath}\n\n${note}`,
+            text: `Analysis Complete.\n\nHTML Report: ${htmlReportPath}\nTotal Files Analyzed: ${totalFiles}\n\nUse these tools for detailed insights:\n- get_file_insights(filePath): Detailed metrics for a specific file\n- get_risk_summary(limit): Get top N risky files\n- get_test_health_summary(): Testing state overview\n- find_untested_hotspots(limit): Files that need tests\n- get_file_test_profile(filePath): Test details for a file`,
           },
           {
             type: "text",
-            text: returnContent
+            text: JSON.stringify(summary, null, 2)
           }
         ],
       };
