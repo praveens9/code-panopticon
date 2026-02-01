@@ -147,6 +147,7 @@ All options are passed via `--args="..."` to Gradle. The `--console=plain` flag 
 | `--classes <path>` | Path to compiled Java `.class` files (for bytecode analysis) | None |
 | `--output <dir>` | Output directory for reports | `reports/` |
 | `--name <name>` | Custom project name for report title | Auto-detect |
+| `--test-only` | Treat **all files** as test code (for automation repos) | Off |
 | `--hotspots-only` | Only analyze files with Git activity (faster for large repos) | Off |
 | `--min-churn <n>` | Minimum commits to include a file (use with `--hotspots-only`) | 1 |
 | `--keep-clone` | Keep cloned repo after analysis (for remote URLs) | Off |
@@ -241,6 +242,18 @@ Override the auto-detected project name in the report header:
 ```
 
 This displays **"My Awesome Project: Risk Analysis"** as the report title.
+
+---
+
+#### 8. Analyze Test Automation Repo
+
+If analyzing a **test-only** repository (e.g., Playwright or Cypress framework), normal analysis might misclassify helper files as production code. Use `--test-only` to treat **everything** as test code:
+
+```bash
+./gradlew run --args="--repo . --test-only" --console=plain
+```
+
+This applies test-specific metrics (like Assertion count, Test Smells) to all files.
 
 ---
 

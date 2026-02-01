@@ -633,6 +633,28 @@ public class HtmlReporter {
                                                 }
 
                                                 function refreshDashboard() {
+                                                     // Auto-detect test-only repo
+                                                     const isTestOnly = rawData.every(d => d.isTest);
+
+                                                     if (!currentScope) {
+                                                         if (isTestOnly) {
+                                                             currentScope = 'test';
+                                                             const prodBtn = document.getElementById('scope-prod');
+                                                             const allBtn = document.getElementById('scope-all');
+                                                             const testBtn = document.getElementById('scope-test');
+
+                                                             if (prodBtn) prodBtn.style.display = 'none';
+                                                             if (allBtn) allBtn.style.display = 'none';
+                                                             if (testBtn) {
+                                                                 testBtn.innerText = 'Test Code Only';
+                                                                 testBtn.classList.add('active');
+                                                             }
+                                                         } else {
+                                                             currentScope = 'prod';
+                                                             document.getElementById('scope-prod').classList.add('active');
+                                                         }
+                                                     }
+
                                                      initDashboard();
                                                      if (typeof updateRiskChart === 'function') updateRiskChart();
                                                      if (document.getElementById('table-tab').classList.contains('active') && typeof renderTable === 'function') {

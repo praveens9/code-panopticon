@@ -104,6 +104,14 @@ class PanopticonServer {
                 type: "boolean",
                 description: "If true, only analyze files with git activity (faster for large repos)",
               },
+              treatAllAsTest: {
+                type: "boolean",
+                description: "If true, treats ALL files as test code. IMPORTANT: Inspect the repo first. If you detect a test-only repo (e.g. Playwright, Cypress, Selenium), you MUST set this to true."
+              },
+              framework: {
+                type: "string",
+                description: "Manually specify the test framework (e.g. playwright, cypress, selenium) if you have identified it from config files (e.g. pom.xml, package.json)."
+              }
             },
             required: ["path"],
           },
@@ -198,8 +206,14 @@ class PanopticonServer {
       throw new McpError(ErrorCode.InvalidParams, "Path is required");
     }
 
-    const repoPath = args.path;
+    let repoPath = args.path;
     const hotspotsOnly = args.hotspotsOnly ? "--hotspots-only" : "";
+    let testOnly = args.treatAllAsTest ? "--test-only" : "";
+    let framework = args.framework ? `--framework ${args.framework}` : "";
+
+    // Note: We previously attempted auto-detection here, but it is better handled by the AI Agent
+    // inspecting the repository first and passing the correct flags.
+    // The Agent has access to `ls`, `cat package.json`, `cat pom.xml` etc.
 
     // Determine output directory relative to the analyzed repo
     // We assume repoPath is the root of the repo
@@ -208,7 +222,7 @@ class PanopticonServer {
     const htmlReportPath = path.join(outputDir, "panopticon-report.html");
 
     // Construct command
-    const cmd = `./gradlew run --args="--repo ${repoPath} ${hotspotsOnly} --output ${outputDir}"`;
+    const cmd = `./gradlew run --args="--repo ${repoPath} ${hotspotsOnly} ${testOnly} ${framework} --output ${outputDir}"`;
 
     try {
       const { stdout, stderr } = await execAsync(cmd, { cwd: REPO_ROOT, maxBuffer: 1024 * 1024 * 10 });
@@ -234,7 +248,7 @@ class PanopticonServer {
       // Always return a compact summary to avoid exceeding MCP client token limits
       // Full JSON can be retrieved via the get_file_insights and other specific tools
       const totalFiles = data.files?.length || 0;
-      
+
       // Get verdict distribution
       const verdictCounts: Record<string, number> = {};
       (data.files || []).forEach((f: any) => {

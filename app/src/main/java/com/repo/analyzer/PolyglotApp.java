@@ -57,6 +57,8 @@ public class PolyglotApp {
                   --classes <path>   Path to compiled Java classes (optional, for bytecode analysis)
                   --output <dir>     Output directory for reports (default: current directory)
                   --name <name>      Custom project name for report title (default: auto-detect)
+                  --test-only        Treat all files as test code (for test automation repos)
+                  --framework <name> Manual test framework override (e.g. playwright, cypress)
                   --hotspots-only    Only analyze files with Git churn (for large repos)
                   --min-churn <n>    Minimum churn to include a file (default: 1)
                   --keep-clone       Keep cloned repo after analysis (for remote URLs)
@@ -70,6 +72,8 @@ public class PolyglotApp {
             Path outputDir,
             String projectName, // Custom project name (optional)
             boolean hotspotsOnly,
+            boolean treatAllAsTest,
+            String framework, // Manual framework override (optional)
             int minChurn,
             boolean keepClone) {
     }
@@ -80,6 +84,8 @@ public class PolyglotApp {
         Path outputDir = Path.of("reports");
         String projectName = null;
         boolean hotspotsOnly = false;
+        boolean treatAllAsTest = false;
+        String framework = null;
         int minChurn = 1;
         boolean keepClone = false;
 
@@ -101,6 +107,11 @@ public class PolyglotApp {
                     if (i + 1 < args.length)
                         projectName = args[++i];
                 }
+                case "--test-only" -> treatAllAsTest = true;
+                case "--framework" -> {
+                    if (i + 1 < args.length)
+                        framework = args[++i];
+                }
                 case "--hotspots-only" -> hotspotsOnly = true;
                 case "--min-churn" -> {
                     if (i + 1 < args.length)
@@ -117,7 +128,9 @@ public class PolyglotApp {
         // Resolve repo path - will be set after potential clone
         Path repoPath = isRemoteUrl(repoInput) ? null : Path.of(repoInput);
 
-        return new CliArgs(repoInput, repoPath, classesPath, outputDir, projectName, hotspotsOnly, minChurn, keepClone);
+        return new CliArgs(repoInput, repoPath, classesPath, outputDir, projectName, hotspotsOnly, treatAllAsTest,
+                framework,
+                minChurn, keepClone);
     }
 
     private static boolean isRemoteUrl(String input) {
@@ -185,8 +198,18 @@ public class PolyglotApp {
     private void runAnalysis(Path repoPath, CliArgs args) throws Exception {
         // Build configuration from YAML (or defaults)
         AnalyzerConfig config = AnalyzerConfig.load(repoPath);
+
+        // Apply CLI overrides
         if (args.classesPath() != null) {
             config = config.withCompiledClassesPath(args.classesPath());
+        }
+        if (args.treatAllAsTest()) {
+            config.setTreatAllAsTest(true);
+            System.out.println("Mode: Test-Only (All files treated as tests)");
+        }
+        if (args.framework() != null) {
+            config.setManualFramework(args.framework());
+            System.out.println("Framework Override: " + args.framework());
         }
 
         // Initialize analyzers
@@ -219,7 +242,7 @@ public class PolyglotApp {
         System.out.println("\n>>> PHASE 2: ANALYZING STRUCTURE <<<");
         ForensicRuleEngine ruleEngine = new ForensicRuleEngine();
         TestabilityAnalyzer testabilityAnalyzer = new TestabilityAnalyzer(repoPath);
-        TestQualityAnalyzer testQualityAnalyzer = new TestQualityAnalyzer();
+        TestQualityAnalyzer testQualityAnalyzer = new TestQualityAnalyzer(config.getManualFramework());
         List<AnalysisData> reportData = new ArrayList<>();
 
         // Print header

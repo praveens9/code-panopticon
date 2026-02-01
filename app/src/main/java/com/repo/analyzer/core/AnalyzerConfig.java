@@ -40,6 +40,10 @@ public class AnalyzerConfig {
             "**/*.test.js", "**/*.spec.js", "**/*.e2e.ts", "**/*.e2e.js",
             "**/specs/**", "**/__tests__/**", "playwright.config.ts");
 
+    // Flags
+    private boolean treatAllAsTest = false;
+    private String manualFramework = null;
+
     // Treemap settings
     private int treemapMaxFiles = 100;
     private boolean treemapGroupByFolder = false;
@@ -260,6 +264,9 @@ public class AnalyzerConfig {
     }
 
     public boolean isTestFile(Path path) {
+        if (treatAllAsTest) {
+            return true;
+        }
         String pathStr = path.toString();
         for (String pattern : testPatterns) {
             if (matchesGlob(pathStr, pattern)) {
@@ -267,6 +274,18 @@ public class AnalyzerConfig {
             }
         }
         return false;
+    }
+
+    public void setTreatAllAsTest(boolean treatAllAsTest) {
+        this.treatAllAsTest = treatAllAsTest;
+    }
+
+    public void setManualFramework(String framework) {
+        this.manualFramework = framework;
+    }
+
+    public String getManualFramework() {
+        return manualFramework;
     }
 
     public Set<String> getTestPatterns() {
