@@ -519,7 +519,7 @@ public class HtmlReporter {
                                             <script>
                                                 const stats = {{STATS_PLACEHOLDER}};
                                                 const allData = {{DATA_PLACEHOLDER}};
-                                                let rawData = allData.filter(d => !d.isTest); // Default to prod only
+                                                let rawData = allData; // Start with all data, let setScope filter it
 
                                                 let treemapData = {{TREEMAP_DATA}};
                                                 let networkData = {{NETWORK_DATA}};
@@ -638,7 +638,7 @@ public class HtmlReporter {
 
                                                      if (!currentScope) {
                                                          if (isTestOnly) {
-                                                             currentScope = 'test';
+                                                             setScope('test');
                                                              const prodBtn = document.getElementById('scope-prod');
                                                              const allBtn = document.getElementById('scope-all');
                                                              const testBtn = document.getElementById('scope-test');
@@ -647,11 +647,10 @@ public class HtmlReporter {
                                                              if (allBtn) allBtn.style.display = 'none';
                                                              if (testBtn) {
                                                                  testBtn.innerText = 'Test Code Only';
-                                                                 testBtn.classList.add('active');
+                                                                 // active class already set by setScope
                                                              }
                                                          } else {
-                                                             currentScope = 'prod';
-                                                             document.getElementById('scope-prod').classList.add('active');
+                                                             setScope('prod');
                                                          }
                                                      }
 
